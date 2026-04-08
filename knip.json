@@ -1,0 +1,24 @@
+{
+  "$schema": "https://unpkg.com/knip@5/schema.json",
+  "workspaces": {
+    "apps/web": {
+      "entry": [
+        "src/app/**/page.tsx",
+        "src/app/**/layout.tsx",
+        "src/app/**/error.tsx",
+        "src/app/**/global-error.tsx",
+        "mdx.config.mjs"
+      ]
+    },
+    "apps/api": {
+      "entry": [
+        "src/app.ts"
+      ]
+    }
+  },
+  "ignoreDependencies": [
+    "ts-node",
+    "@tailwindcss/typography",
+    "babel-plugin-react-compiler"
+  ]
+}

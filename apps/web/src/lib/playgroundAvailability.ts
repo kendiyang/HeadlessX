@@ -1,0 +1,251 @@
+export type PlaygroundOperatorState =
+    | 'active'
+    | 'configuration_required'
+    | 'coming_soon'
+    | 'offline';
+
+export interface PlaygroundOperator {
+    id: string;
+    name: string;
+    tagline: string;
+    description: string;
+    category: 'website' | 'search' | 'media' | 'social' | 'commerce';
+    features: string[];
+    playgroundHref: string;
+    apiBasePath?: string;
+    order: number;
+    available: boolean;
+    comingSoon: boolean;
+    state: PlaygroundOperatorState;
+    reason: string | null;
+}
+
+export interface PlaygroundOperatorAvailability {
+    available: boolean;
+    state: PlaygroundOperatorState;
+    reason: string | null;
+}
+
+type PlaygroundOperatorsPayload = {
+    success?: boolean;
+    data?: {
+        operators?: PlaygroundOperator[];
+    };
+};
+
+const backendApiUrl =
+    process.env.INTERNAL_API_URL?.trim() || process.env.NEXT_PUBLIC_API_URL?.trim();
+const dashboardInternalApiKey = process.env.DASHBOARD_INTERNAL_API_KEY?.trim();
+
+function delay(ms: number) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function fetchOperators(): Promise<PlaygroundOperator[]> {
+    if (!backendApiUrl || !dashboardInternalApiKey) {
+        return [];
+    }
+
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+        try {
+            const response = await fetch(new URL('/api/operators/status', backendApiUrl), {
+                method: 'GET',
+                headers: { 'x-api-key': dashboardInternalApiKey },
+                cache: 'no-store',
+            });
+
+            if (!response.ok) {
+                return [];
+            }
+
+            const payload = (await response.json()) as PlaygroundOperatorsPayload;
+            return payload.success ? (payload.data?.operators ?? []) : [];
+        } catch {
+            if (attempt === 2) {
+                return [];
+            }
+
+            await delay(750 * (attempt + 1));
+        }
+    }
+
+    return [];
+}
+
+export async function getPlaygroundOperators() {
+    return fetchOperators();
+}
+
+export async function getTavilyAvailability() {
+    const operators = await fetchOperators();
+    return operators.find((operator) => operator.id === 'tavily')?.available ?? false;
+}
+
+export async function getExaAvailability() {
+    const operators = await fetchOperators();
+    return operators.find((operator) => operator.id === 'exa')?.available ?? false;
+}
+
+export async function getYoutubeAvailability() {
+    const operators = await fetchOperators();
+    return operators.find((operator) => operator.id === 'youtube')?.available ?? false;
+}
+
+export async function getAmazonAvailability() {
+    const operators = await fetchOperators();
+    return operators.find((operator) => operator.id === 'amazon')?.available ?? false;
+}
+
+export async function getRedditAvailability() {
+    const operators = await fetchOperators();
+    return operators.find((operator) => operator.id === 'reddit')?.available ?? false;
+}
+
+export async function getYoutubeAvailabilityState(): Promise<PlaygroundOperatorAvailability> {
+    const operators = await fetchOperators();
+    const youtube = operators.find((operator) => operator.id === 'youtube');
+
+    if (youtube) {
+        return {
+            available: youtube.available,
+            state: youtube.state,
+            reason: youtube.reason,
+        };
+    }
+
+    if (!backendApiUrl || !dashboardInternalApiKey) {
+        return {
+            available: false,
+            state: 'configuration_required',
+            reason: 'The dashboard internal API is not configured. Check INTERNAL_API_URL and DASHBOARD_INTERNAL_API_KEY.',
+        };
+    }
+
+    return {
+        available: false,
+        state: 'offline',
+        reason: 'The dashboard could not read operator availability from the internal API. Check API reachability and internal auth.',
+    };
+}
+
+export async function getAmazonAvailabilityState(): Promise<PlaygroundOperatorAvailability> {
+    const operators = await fetchOperators();
+    const amazon = operators.find((operator) => operator.id === 'amazon');
+
+    if (amazon) {
+        return {
+            available: amazon.available,
+            state: amazon.state,
+            reason: amazon.reason,
+        };
+    }
+
+    if (!backendApiUrl || !dashboardInternalApiKey) {
+        return {
+            available: false,
+            state: 'configuration_required',
+            reason: 'The dashboard internal API is not configured. Check INTERNAL_API_URL and DASHBOARD_INTERNAL_API_KEY.',
+        };
+    }
+
+    return {
+        available: false,
+        state: 'offline',
+        reason: 'The dashboard could not read Amazon operator availability from the internal API. Check API reachability and internal auth.',
+    };
+}
+
+export async function getEbayAvailabilityState(): Promise<PlaygroundOperatorAvailability> {
+    const operators = await fetchOperators();
+    const ebay = operators.find((operator) => operator.id === 'ebay');
+
+    if (ebay) {
+        return {
+            available: ebay.available,
+            state: ebay.state,
+            reason: ebay.reason,
+        };
+    }
+
+    if (!backendApiUrl || !dashboardInternalApiKey) {
+        return {
+            available: false,
+            state: 'configuration_required',
+            reason: 'The dashboard internal API is not configured. Check INTERNAL_API_URL and DASHBOARD_INTERNAL_API_KEY.',
+        };
+    }
+
+    return {
+        available: false,
+        state: 'offline',
+        reason: 'The dashboard could not read eBay operator availability from the internal API. Check API reachability and internal auth.',
+    };
+}
+
+export async function getWalmartAvailabilityState(): Promise<PlaygroundOperatorAvailability> {
+    const operators = await fetchOperators();
+    const walmart = operators.find((operator) => operator.id === 'walmart');
+
+    if (walmart) {
+        return {
+            available: walmart.available,
+            state: walmart.state,
+            reason: walmart.reason,
+        };
+    }
+
+    if (!backendApiUrl || !dashboardInternalApiKey) {
+        return {
+            available: false,
+            state: 'configuration_required',
+            reason: 'The dashboard internal API is not configured. Check INTERNAL_API_URL and DASHBOARD_INTERNAL_API_KEY.',
+        };
+    }
+
+    return {
+        available: false,
+        state: 'offline',
+        reason: 'The dashboard could not read Walmart operator availability from the internal API. Check API reachability and internal auth.',
+    };
+}
+
+export async function getRedditAvailabilityState(): Promise<PlaygroundOperatorAvailability> {
+    const operators = await fetchOperators();
+    const reddit = operators.find((operator) => operator.id === 'reddit');
+
+    if (reddit) {
+        return {
+            available: reddit.available,
+            state: reddit.state,
+            reason: reddit.reason,
+        };
+    }
+
+    if (!backendApiUrl || !dashboardInternalApiKey) {
+        return {
+            available: false,
+            state: 'configuration_required',
+            reason: 'The dashboard internal API is not configured. Check INTERNAL_API_URL and DASHBOARD_INTERNAL_API_KEY.',
+        };
+    }
+
+    return {
+        available: false,
+        state: 'offline',
+        reason: 'The dashboard could not read Reddit operator availability from the internal API. Check API reachability and internal auth.',
+    };
+}
+
+export async function getPlaygroundAvailability() {
+    const operators = await fetchOperators();
+
+    return {
+        youtubeAvailable: operators.find((operator) => operator.id === 'youtube')?.available ?? false,
+        exaAvailable: operators.find((operator) => operator.id === 'exa')?.available ?? false,
+        tavilyAvailable: operators.find((operator) => operator.id === 'tavily')?.available ?? false,
+        redditAvailable: operators.find((operator) => operator.id === 'reddit')?.available ?? false,
+        amazonAvailable: operators.find((operator) => operator.id === 'amazon')?.available ?? false,
+        ebayAvailable: operators.find((operator) => operator.id === 'ebay')?.available ?? false,
+        walmartAvailable: operators.find((operator) => operator.id === 'walmart')?.available ?? false,
+    };
+}

@@ -1,0 +1,49 @@
+{
+    "name": "headlessx-pro",
+    "version": "2.1.2",
+    "private": true,
+    "packageManager": "pnpm@10.32.1",
+    "engines": {
+        "node": ">=18.0.0",
+        "pnpm": ">=9.0.0"
+    },
+    "scripts": {
+        "preinstall": "npx only-allow pnpm",
+        "dev": "pnpm exec nx run headlessx-pro:dev",
+        "markdown:dev": "cd apps/go-html-to-md-service && PORT=${HTML_TO_MARKDOWN_PORT:-38081} go run .",
+        "markdown:start": "cd apps/go-html-to-md-service && PORT=${HTML_TO_MARKDOWN_PORT:-38081} go run .",
+        "yt-engine:dev": "cd apps/yt-engine && uv run python -m uvicorn app.main:app --reload --host 0.0.0.0 --port ${YT_ENGINE_PORT:-38090}",
+        "yt-engine:start": "cd apps/yt-engine && uv run python -m uvicorn app.main:app --host 0.0.0.0 --port ${YT_ENGINE_PORT:-38090}",
+        "build": "nx run-many -t build",
+        "start": "pnpm exec nx run headlessx-pro:start",
+        "lint": "biome check .",
+        "lint:fix": "biome check --write .",
+        "format": "biome format --write .",
+        "knip": "knip",
+        "verify:reddit:prelaunch": "bash scripts/release/reddit_prelaunch.sh",
+        "security:rotate-api-key": "node scripts/security/rotate_api_key.mjs",
+        "monitor:reddit:slo": "node scripts/monitoring/reddit_slo_check.mjs",
+        "db:push": "nx run headlessx-api:db:push",
+        "db:migrate": "nx run headlessx-api:db:migrate",
+        "db:studio": "nx run headlessx-api:db:studio",
+        "db:deploy": "nx run headlessx-api:db:deploy",
+        "camoufox:fetch": "nx run headlessx-api:camoufox:fetch",
+        "models:download": "python3 scripts/download_models.py",
+        "install:all": "pnpm install"
+    },
+    "pnpm": {
+        "overrides": {
+            "@isaacs/brace-expansion": ">=5.0.1",
+            "hono": ">=4.11.9",
+            "lodash": ">=4.17.23"
+        }
+    },
+    "devDependencies": {
+        "@biomejs/biome": "^2.4.4",
+        "@nx/workspace": "^22.5.2",
+        "concurrently": "^9.2.1",
+        "knip": "^5.85.0",
+        "nx": "^22.5.2",
+        "only-allow": "^1.2.1"
+    }
+}
