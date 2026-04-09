@@ -22,6 +22,7 @@ import { cn } from '@/lib/utils';
 import { useSidebar } from '@/contexts/SidebarContext';
 import { useQuery } from '@tanstack/react-query';
 import { Skeleton } from "@/components/ui/Skeleton";
+import { redirectToLoginPreservingNext } from '@/lib/dashboardClientAuth';
 
 type NavItem = {
     href: string;
@@ -173,6 +174,10 @@ export function Sidebar() {
         queryKey: ['sidebar-dashboard-stats'],
         queryFn: async () => {
             const res = await fetch('/api/dashboard/stats');
+            if (res.status === 401) {
+                redirectToLoginPreservingNext();
+                return { systemLoad: 0 };
+            }
             if (!res.ok) {
                 return { systemLoad: 0 };
             }

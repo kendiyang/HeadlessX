@@ -37,7 +37,11 @@ function appendSecurityHeaders(response: NextResponse): NextResponse {
 function buildLoginRedirect(request: NextRequest): NextResponse {
     const loginUrl = new URL('/login', request.url);
     const currentPath = `${request.nextUrl.pathname}${request.nextUrl.search}`;
-    loginUrl.searchParams.set('next', currentPath);
+
+    if (currentPath !== '/') {
+        loginUrl.searchParams.set('next', currentPath);
+    }
+
     return NextResponse.redirect(loginUrl);
 }
 
@@ -85,6 +89,7 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
     matcher: [
+        '/',
         '/((?!_next/static|_next/image|favicon.ico|favicon.svg|robots.txt|sitemap.xml).*)',
     ],
 };

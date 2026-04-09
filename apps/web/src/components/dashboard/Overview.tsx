@@ -17,6 +17,7 @@ import Link from "next/link";
 import StackedList from "@/components/ui/stacked-list";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { OverviewSkeleton } from "./OverviewSkeleton";
+import { redirectToLoginPreservingNext } from '@/lib/dashboardClientAuth';
 
 function RecentActivitySkeleton() {
     return (
@@ -40,6 +41,10 @@ function RecentActivityList() {
         queryKey: ["dashboard-logs"],
         queryFn: async () => {
             const res = await fetch('/api/logs?limit=5');
+            if (res.status === 401) {
+                redirectToLoginPreservingNext();
+                throw new Error('Dashboard authentication required');
+            }
             if (!res.ok) throw new Error('Failed to fetch logs');
             return res.json();
         },
@@ -94,6 +99,10 @@ export default function Overview() {
         queryKey: ["dashboard-stats"],
         queryFn: async () => {
             const res = await fetch('/api/dashboard/stats');
+            if (res.status === 401) {
+                redirectToLoginPreservingNext();
+                throw new Error('Dashboard authentication required');
+            }
             if (!res.ok) throw new Error('Failed to fetch stats');
             return res.json();
         },

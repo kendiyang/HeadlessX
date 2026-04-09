@@ -78,8 +78,12 @@ function parseSessionTtlSeconds(value: string | null): number {
 
 export function getDashboardAuthConfig(): DashboardAuthConfig {
     const explicitEnabled = parseBooleanEnv(readEnv('DASHBOARD_AUTH_ENABLED'));
-    const enabled = explicitEnabled ?? process.env.NODE_ENV === 'production';
-    const secureCookies = parseBooleanEnv(readEnv('DASHBOARD_AUTH_SECURE_COOKIES')) ?? process.env.NODE_ENV === 'production';
+    const allowDisableInProduction =
+        parseBooleanEnv(readEnv('DASHBOARD_AUTH_ALLOW_DISABLE_IN_PRODUCTION')) ?? false;
+    const isProduction = process.env.NODE_ENV === 'production';
+    const resolvedEnabled = explicitEnabled ?? isProduction;
+    const enabled = isProduction && !allowDisableInProduction ? true : resolvedEnabled;
+    const secureCookies = parseBooleanEnv(readEnv('DASHBOARD_AUTH_SECURE_COOKIES')) ?? isProduction;
 
     return {
         enabled,
@@ -395,13 +399,8 @@ export function isSameOriginRequest(request: NextRequest): boolean {
         }
     };
 
-    if (sameOriginByHeader(request.headers.get('origin'))) {
-        return true;
-    }
-
-    if (sameOriginByHeader(request.headers.get('referer'))) {
-        return true;
-    }
-
-    return request.headers.get('sec-fetch-site') === 'same-origin';
+    return (
+        sameOriginByHeader(request.headers.get('origin')) ||
+        sameOriginByHeader(request.headers.get('referer'))
+    );
 }

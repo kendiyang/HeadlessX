@@ -25,6 +25,7 @@ import { CustomDropdown } from '@/components/ui/CustomDropdown';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
+import { redirectToLoginPreservingNext } from '@/lib/dashboardClientAuth';
 
 interface LogEntry {
     id: string;
@@ -176,6 +177,10 @@ function formatLatency(durationMs?: number | null) {
 
 async function fetchLogs(page: number, limit: number): Promise<LogsResponse> {
     const res = await fetch(`/api/logs?page=${page}&limit=${limit}`);
+    if (res.status === 401) {
+        redirectToLoginPreservingNext();
+        throw new Error('Dashboard authentication required');
+    }
     if (!res.ok) {
         throw new Error('Failed to fetch request logs');
     }
@@ -184,6 +189,10 @@ async function fetchLogs(page: number, limit: number): Promise<LogsResponse> {
 
 async function fetchStats(): Promise<StatsResponse> {
     const res = await fetch('/api/logs/stats');
+    if (res.status === 401) {
+        redirectToLoginPreservingNext();
+        throw new Error('Dashboard authentication required');
+    }
     if (!res.ok) {
         throw new Error('Failed to fetch log statistics');
     }

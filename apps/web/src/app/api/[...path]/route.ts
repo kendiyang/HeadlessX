@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server';
 import {
     getDashboardAuthConfig,
     getDashboardAuthConfigError,
+    isSameOriginRequest,
     verifyDashboardSessionToken,
 } from '@/lib/dashboardAuth';
 
@@ -105,45 +106,6 @@ function isAllowedProxyPath(path: string[]): boolean {
     return ALLOWED_API_ROOT_SEGMENTS.has(root);
 }
 
-function inferExpectedOrigin(request: NextRequest): string | null {
-    const host = request.headers.get('x-forwarded-host') || request.headers.get('host');
-    if (!host) {
-        return null;
-    }
-
-    const protocol = request.headers.get('x-forwarded-proto') || request.nextUrl.protocol.replace(/:$/, '');
-    return `${protocol}://${host}`;
-}
-
-function hasSameOriginSignal(request: NextRequest): boolean {
-    const expectedOrigin = inferExpectedOrigin(request);
-    if (!expectedOrigin) {
-        return false;
-    }
-
-    const sameOriginByHeader = (value: string | null): boolean => {
-        if (!value) {
-            return false;
-        }
-
-        try {
-            return new URL(value).origin === expectedOrigin;
-        } catch {
-            return false;
-        }
-    };
-
-    if (sameOriginByHeader(request.headers.get('origin'))) {
-        return true;
-    }
-
-    if (sameOriginByHeader(request.headers.get('referer'))) {
-        return true;
-    }
-
-    return request.headers.get('sec-fetch-site') === 'same-origin';
-}
-
 async function proxyRequest(request: NextRequest, context: RouteContext): Promise<Response> {
     const authConfig = getDashboardAuthConfig();
     if (authConfig.enabled) {
@@ -195,7 +157,7 @@ async function proxyRequest(request: NextRequest, context: RouteContext): Promis
         );
     }
 
-    if (!hasSameOriginSignal(request)) {
+    if (!isSameOriginRequest(request)) {
         return Response.json(
             { success: false, error: 'Dashboard proxy rejected cross-origin request' },
             { status: 403 }
