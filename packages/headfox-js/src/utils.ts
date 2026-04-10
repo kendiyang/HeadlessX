@@ -219,6 +219,23 @@ interface WebGlLaunchConfig {
 	firefoxUserPrefs: Record<string, any>;
 }
 
+function isWebGLSamplingUnavailableError(error: unknown): boolean {
+	if (error instanceof WebGLFingerprintUnavailable) {
+		return true;
+	}
+
+	if (!(error instanceof Error)) {
+		return false;
+	}
+
+	const message = error.message.toLowerCase();
+	return (
+		message.includes("no such table: webgl_fingerprints") ||
+		message.includes("unable to open database file") ||
+		message.includes("no such file or directory")
+	);
+}
+
 export async function resolveWebGlLaunchConfig({
 	targetOS,
 	block_webgl,
@@ -257,7 +274,7 @@ export async function resolveWebGlLaunchConfig({
 			},
 		};
 	} catch (error) {
-		if (!(error instanceof WebGLFingerprintUnavailable)) {
+		if (!isWebGLSamplingUnavailableError(error)) {
 			throw error;
 		}
 
@@ -561,6 +578,34 @@ function getProxyUrl(
 	return url;
 }
 
+async function resolveGeoIpAddress(
+	geoip: string | boolean,
+	proxyUrl: URL | null,
+): Promise<string> {
+	if (geoip === true) {
+		return publicIP(proxyUrl?.href);
+	}
+
+	if (typeof geoip !== "string") {
+		throw new Error("The `geoip` option must be `true` or a valid IP address.");
+	}
+
+	const explicitIp = geoip.trim();
+	if (!explicitIp) {
+		throw new Error(
+			"The `geoip` option was an empty string. Pass `true` or a valid IP address.",
+		);
+	}
+
+	if (!validIPv4(explicitIp) && !validIPv6(explicitIp)) {
+		throw new Error(
+			`The \`geoip\` option must be \`true\` or a valid IP address. Received: ${geoip}`,
+		);
+	}
+
+	return explicitIp;
+}
+
 /**
  * Prepare launch options for Playwright's Firefox browser.
  *
@@ -734,21 +779,19 @@ export async function launchOptions({
 	// Set geolocation
 	if (geoip) {
 		geoipAllowed();
-
-		// Find the user's IP address
-		geoip = await publicIP(proxyUrl?.href);
+		const geoipAddress = await resolveGeoIpAddress(geoip, proxyUrl);
 
 		// Spoof WebRTC if not blocked
 		if (!block_webrtc) {
-			if (validIPv4(geoip)) {
-				setInto(config, "webrtc:ipv4", geoip);
+			if (validIPv4(geoipAddress)) {
+				setInto(config, "webrtc:ipv4", geoipAddress);
 				firefox_user_prefs["network.dns.disableIPv6"] = true;
-			} else if (validIPv6(geoip)) {
-				setInto(config, "webrtc:ipv6", geoip);
+			} else if (validIPv6(geoipAddress)) {
+				setInto(config, "webrtc:ipv6", geoipAddress);
 			}
 		}
 
-		const geolocation = await getGeolocation(geoip);
+		const geolocation = await getGeolocation(geoipAddress);
 		config = { ...config, ...geolocation.asConfig() };
 	}
 

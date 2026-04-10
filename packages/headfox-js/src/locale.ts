@@ -245,12 +245,31 @@ export async function getGeolocation(ip: string): Promise<Geolocation> {
 	);
 }
 
-async function getUnicodeInfo(): Promise<any> {
-	const data = await fs.promises.readFile(
+function getUnicodeInfo(): any {
+	const data = fs.readFileSync(
 		path.join(currentDir, "data-files", "territoryInfo.xml"),
 	);
-	const parser = new xml2js.Parser();
-	return parser.parseStringPromise(data);
+	const parser = new xml2js.Parser({ async: false });
+	let parsed: any;
+	let parseError: Error | null = null;
+
+	parser.parseString(data, (error, result) => {
+		if (error) {
+			parseError = error;
+			return;
+		}
+		parsed = result;
+	});
+
+	if (parseError) {
+		throw parseError;
+	}
+
+	if (!parsed) {
+		throw new Error("Failed to load locale territory data.");
+	}
+
+	return parsed;
 }
 
 function asFloat(element: any, attr: string): number {
@@ -258,18 +277,17 @@ function asFloat(element: any, attr: string): number {
 }
 
 class StatisticalLocaleSelector {
-	private root: any;
+	private root: any | null = null;
 
-	constructor() {
-		this.loadUnicodeInfo();
-	}
-
-	private async loadUnicodeInfo() {
-		this.root = await getUnicodeInfo();
+	private getRoot(): any {
+		if (!this.root) {
+			this.root = getUnicodeInfo();
+		}
+		return this.root;
 	}
 
 	private loadTerritoryData(isoCode: string): [string[], number[]] {
-		const territory = this.root.territoryInfo.territory.find(
+		const territory = this.getRoot().territoryInfo.territory.find(
 			(t: any) => t.$.type === isoCode,
 		);
 		if (!territory) {
@@ -290,8 +308,10 @@ class StatisticalLocaleSelector {
 	}
 
 	private loadLanguageData(language: string): [string[], number[]] {
-		const territories = this.root.territory.filter((t: any) =>
-			t.languagePopulation.some((lp: any) => lp.$.type === language),
+		const territories = this.getRoot().territoryInfo.territory.filter(
+			(t: any) =>
+				Array.isArray(t.languagePopulation) &&
+				t.languagePopulation.some((lp: any) => lp.$.type === language),
 		);
 
 		if (!territories.length) {

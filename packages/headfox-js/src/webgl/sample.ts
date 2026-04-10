@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type BetterSqlite3 from "better-sqlite3";
@@ -10,6 +11,19 @@ declare const Bun: unknown;
 // Cached Database constructor - loaded lazily on first use
 let DatabaseConstructor: typeof BetterSqlite3 | null = null;
 
+function isMissingSamplingDataError(error: unknown): boolean {
+	if (!(error instanceof Error)) {
+		return false;
+	}
+
+	const message = error.message.toLowerCase();
+	return (
+		message.includes("no such table: webgl_fingerprints") ||
+		message.includes("unable to open database file") ||
+		message.includes("no such file or directory")
+	);
+}
+
 /**
  * Opens a SQLite database using the appropriate driver for the runtime.
  * Uses bun:sqlite in Bun, better-sqlite3 in Node.js.
@@ -17,6 +31,12 @@ let DatabaseConstructor: typeof BetterSqlite3 | null = null;
  */
 async function openDatabase(pathName: string): Promise<BetterSqlite3.Database> {
 	try {
+		if (!existsSync(pathName)) {
+			throw new WebGLFingerprintUnavailable(
+				"WebGL fingerprint sampling database is missing. Install the optional data bundle or continue with WebGL disabled.",
+			);
+		}
+
 		if (!DatabaseConstructor) {
 			if (typeof Bun !== "undefined") {
 				// @ts-expect-error - bun:sqlite only exists in Bun runtime
@@ -32,6 +52,9 @@ async function openDatabase(pathName: string): Promise<BetterSqlite3.Database> {
 		}
 		return new DatabaseConstructor(pathName);
 	} catch (error) {
+		if (error instanceof WebGLFingerprintUnavailable) {
+			throw error;
+		}
 		throw new WebGLFingerprintUnavailable(
 			"WebGL fingerprint sampling data could not be loaded. Install optional SQLite support or continue with WebGL disabled.",
 			{ cause: error },
@@ -130,6 +153,15 @@ export async function sampleWebGL(
 				resolve(JSON.parse(dataStrs[idx]));
 			}
 		} catch (err) {
+			if (isMissingSamplingDataError(err)) {
+				reject(
+					new WebGLFingerprintUnavailable(
+						"WebGL fingerprint sampling database is unavailable in this runtime.",
+						{ cause: err instanceof Error ? err : undefined },
+					),
+				);
+				return;
+			}
 			reject(err);
 		}
 	}).finally(() => {
@@ -166,6 +198,15 @@ export async function getPossiblePairs(): Promise<PossiblePairs> {
 
 			resolve(result);
 		} catch (err) {
+			if (isMissingSamplingDataError(err)) {
+				reject(
+					new WebGLFingerprintUnavailable(
+						"WebGL fingerprint sampling database is unavailable in this runtime.",
+						{ cause: err instanceof Error ? err : undefined },
+					),
+				);
+				return;
+			}
 			reject(err);
 		}
 	}).finally(() => {

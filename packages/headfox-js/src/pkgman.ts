@@ -227,7 +227,7 @@ class Version {
 	}
 
 	isSupported(): boolean {
-		return VERSION_MIN.lessThan(this) && this.lessThan(VERSION_MAX);
+		return !this.lessThan(VERSION_MIN) && this.lessThan(VERSION_MAX);
 	}
 
 	static fromPath(filePath: PathLike = INSTALL_DIR): Version {
@@ -314,9 +314,7 @@ export class GitHubDownloader {
 		}
 
 		const releaseData = await response.json();
-		const releases = Array.isArray(releaseData)
-			? releaseData
-			: [releaseData];
+		const releases = Array.isArray(releaseData) ? releaseData : [releaseData];
 
 		for (const release of releases) {
 			for (const asset of release.assets) {
@@ -342,14 +340,21 @@ export class HeadfoxFetcher extends GitHubDownloader {
 		super(resolveReleaseRepo(), resolveReleaseTag());
 		this.arch = HeadfoxFetcher.getPlatformArch();
 		this.assetNameOverride = resolveAssetName();
-		this.pattern = buildAssetPattern(resolveAssetPrefixes(), OS_NAME, this.arch);
+		this.pattern = buildAssetPattern(
+			resolveAssetPrefixes(),
+			OS_NAME,
+			this.arch,
+		);
 	}
 
 	async init() {
 		await this.fetchLatest();
 	}
 
-	checkAsset(asset: GitHubAsset, release: GitHubRelease): [Version, string] | null {
+	checkAsset(
+		asset: GitHubAsset,
+		release: GitHubRelease,
+	): [Version, string] | null {
 		if (this.assetNameOverride && asset.name !== this.assetNameOverride) {
 			return null;
 		}

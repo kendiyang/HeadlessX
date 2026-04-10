@@ -1,7 +1,9 @@
 import { afterEach, describe, expect, test } from "vitest";
 import {
-	DEFAULT_RELEASE_REPO,
 	buildAssetPattern,
+	DEFAULT_RELEASE_REPO,
+	HeadfoxFetcher,
+	OS_NAME,
 	parseVersionParts,
 	resolveAssetName,
 	resolveReleaseRepo,
@@ -60,5 +62,36 @@ describe("pkgman asset parsing", () => {
 			version: "135.0.1",
 			release: "beta.24",
 		});
+	});
+
+	test("accepts assets at the minimum supported release boundary", () => {
+		const fetcher = new HeadfoxFetcher();
+		const asset = {
+			name: `camoufox-135.0.1-beta.19-${OS_NAME}.${fetcher.arch}.zip`,
+			browser_download_url: "https://example.com/camoufox.zip",
+		};
+
+		const result = fetcher.checkAsset(asset, {
+			assets: [asset],
+			tag_name: "v135.0.1-beta.19",
+		});
+
+		expect(result).not.toBeNull();
+		expect(result?.[1]).toBe(asset.browser_download_url);
+	});
+
+	test("rejects assets below the minimum supported release boundary", () => {
+		const fetcher = new HeadfoxFetcher();
+		const asset = {
+			name: `camoufox-135.0.1-beta.18-${OS_NAME}.${fetcher.arch}.zip`,
+			browser_download_url: "https://example.com/camoufox.zip",
+		};
+
+		const result = fetcher.checkAsset(asset, {
+			assets: [asset],
+			tag_name: "v135.0.1-beta.18",
+		});
+
+		expect(result).toBeNull();
 	});
 });
