@@ -83,3 +83,71 @@ export function websiteMapMarkdown(data: {
 export function jsonTitleMarkdown(title: string, data: unknown) {
     return `# ${title}\n\n${asMarkdownCodeBlock(data)}`;
 }
+
+type AmazonInspectMarkdownShape = {
+    title?: string | null;
+    url?: string | null;
+    asin?: string | null;
+    brand?: string | null;
+    price?: {
+        value?: number | null;
+        currency?: string | null;
+    } | null;
+    reviewsCount?: number | null;
+    features?: string[] | null;
+    seller?: {
+        name?: string | null;
+        id?: string | null;
+        url?: string | null;
+    } | null;
+    reviews?: unknown[] | null;
+};
+
+export function amazonInspectMarkdown(input: unknown) {
+    const data = (input || {}) as AmazonInspectMarkdownShape;
+    const title = data.title || 'Untitled product';
+    const url = data.url || 'n/a';
+    const asin = data.asin || 'n/a';
+    const brand = data.brand || 'n/a';
+    const priceText =
+        data.price?.value !== null && data.price?.value !== undefined
+            ? `${data.price?.currency || ''}${data.price.value}`
+            : 'n/a';
+    const reviewsCount =
+        typeof data.reviewsCount === 'number'
+            ? data.reviewsCount.toLocaleString()
+            : 'n/a';
+    const reviewCollected = Array.isArray(data.reviews) ? data.reviews.length : 0;
+
+    const lines = [
+        '# Amazon Inspect',
+        '',
+        `**Title:** ${title}`,
+        `**URL:** ${url}`,
+        `**ASIN:** ${asin}`,
+        `**Brand:** ${brand}`,
+        `**Price:** ${priceText}`,
+        `**Reviews Count:** ${reviewsCount}`,
+        `**Reviews Returned:** ${reviewCollected}`,
+        `**Seller:** ${data.seller?.name || 'n/a'} (${data.seller?.id || 'n/a'})`,
+    ];
+
+    if (Array.isArray(data.features) && data.features.length > 0) {
+        lines.push('');
+        lines.push('## Features');
+        lines.push('');
+        for (const feature of data.features.slice(0, 8)) {
+            lines.push(`- ${feature}`);
+        }
+        if (data.features.length > 8) {
+            lines.push(`- ...and ${data.features.length - 8} more`);
+        }
+    }
+
+    lines.push('');
+    lines.push('## Full Payload');
+    lines.push('');
+    lines.push(asMarkdownCodeBlock(data));
+
+    return lines.join('\n');
+}

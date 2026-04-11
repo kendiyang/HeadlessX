@@ -1,4 +1,4 @@
-import { JSDOM } from 'jsdom';
+import { JSDOM, VirtualConsole } from 'jsdom';
 import {
     antiBotDetectionService,
     type AntiBotDetectionResult,
@@ -11,6 +11,8 @@ export interface CommerceInspectInput {
     stealth?: boolean;
     waitForSelector?: string;
 }
+
+const JSDOM_SILENT_VIRTUAL_CONSOLE = new VirtualConsole();
 
 export interface CommerceDiagnostics {
     blocked: boolean;
@@ -245,7 +247,10 @@ export async function scrapeCommercePage(
 }
 
 export function createDom(html: string, pageUrl: string): Document {
-    return new JSDOM(html, { url: pageUrl }).window.document;
+    return new JSDOM(html, {
+        url: pageUrl,
+        virtualConsole: JSDOM_SILENT_VIRTUAL_CONSOLE,
+    }).window.document;
 }
 
 function flattenJsonLd(payload: unknown): unknown[] {

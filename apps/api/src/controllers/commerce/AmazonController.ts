@@ -4,16 +4,16 @@ import { prisma } from '../../database/client';
 import {
     AmazonServiceError,
     amazonService,
-    type AmazonReviewSortBy,
 } from '../../services/commerce/AmazonService';
 
 const AmazonInspectSchema = z.object({
     input: z.string().trim().min(1).max(512),
     marketplace: z.string().trim().min(2).max(64).optional(),
     includeReviews: z.boolean().optional().default(true),
-    reviewPageLimit: z.number().int().min(1).max(10).optional().default(3),
+    reviewPageLimit: z.number().int().min(1).max(5000).optional().default(1),
     reviewSortBy: z.enum(['recent', 'helpful']).optional().default('recent'),
-    reviewerType: z.string().trim().min(1).max(64).optional().default('all_reviews'),
+    reviewStar: z.enum(['all', 'positive', 'critical']).optional(),
+    reviewerType: z.string().trim().min(1).max(64).optional(),
     reviewStopAtId: z.string().trim().min(1).max(128).optional(),
     timeout: z.number().int().min(5000).max(180000).optional(),
     stealth: z.boolean().optional(),
@@ -81,7 +81,8 @@ export class AmazonController {
                 marketplace: payload.marketplace,
                 includeReviews: payload.includeReviews,
                 reviewPageLimit: payload.reviewPageLimit,
-                reviewSortBy: payload.reviewSortBy as AmazonReviewSortBy,
+                reviewSortBy: payload.reviewSortBy,
+                reviewStar: payload.reviewStar,
                 reviewerType: payload.reviewerType,
                 reviewStopAtId: payload.reviewStopAtId,
                 timeout: payload.timeout,

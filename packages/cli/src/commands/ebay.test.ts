@@ -19,10 +19,8 @@ describe('ebay command handlers', () => {
 
   test('handleEbayInspectCommand calls eBay inspect endpoint with mapped body', async () => {
     await handleEbayInspectCommand('123456789012', {
-      marketplace: 'ebay.com',
       timeout: 45000,
       stealth: true,
-      waitForSelector: '.x-price-primary',
       json: true,
       pretty: true,
       output: '/tmp/ebay.json',
@@ -33,10 +31,8 @@ describe('ebay command handlers', () => {
       path: '/api/operators/ebay/inspect',
       body: {
         input: '123456789012',
-        marketplace: 'ebay.com',
         timeout: 45000,
         stealth: true,
-        waitForSelector: '.x-price-primary',
       },
     });
 
@@ -49,6 +45,31 @@ describe('ebay command handlers', () => {
         title: 'eBay Inspect',
       }
     );
+  });
+
+  test('handleEbayInspectCommand maps review options', async () => {
+    await handleEbayInspectCommand('123456789012', {
+      reviews: false,
+      reviewPageLimit: 25,
+      reviewSortBy: 'relevant',
+      reviewStar: 'negative',
+      reviewerType: 'all_reviews',
+      reviewStopAtId: 'REV002',
+    });
+
+    expect(requestJson).toHaveBeenCalledWith({
+      method: 'POST',
+      path: '/api/operators/ebay/inspect',
+      body: {
+        input: '123456789012',
+        includeReviews: false,
+        reviewPageLimit: 25,
+        reviewSortBy: 'relevant',
+        reviewStar: 'negative',
+        reviewerType: 'all_reviews',
+        reviewStopAtId: 'REV002',
+      },
+    });
   });
 
   test('handleEbayStatusCommand calls status endpoint', async () => {

@@ -402,8 +402,9 @@ amazon
   .option('--marketplace <value>', 'Marketplace domain or locale (for example: amazon.com, com, co.uk)')
   .option('--no-reviews', 'Skip review crawling')
   .option('--review-page-limit <number>', 'Maximum review pages to crawl', parseInt)
-  .option('--review-sort-by <mode>', 'recent or helpful', 'recent')
-  .option('--reviewer-type <type>', 'all_reviews, avp_only_reviews, or a custom reviewer type', 'all_reviews')
+  .option('--review-sort-by <mode>', 'recent or helpful (Amazon requests are normalized to recent)', 'recent')
+  .option('--review-star <mode>', 'all, positive, or critical', 'all')
+  .option('--reviewer-type <type>', 'Amazon requests force all_reviews; custom values are ignored', 'all_reviews')
   .option('--review-stop-at-id <id>', 'Stop review crawl when this review ID is reached')
   .option('--timeout <ms>', 'Request timeout in milliseconds', parseInt)
   .option('--stealth <mode>', 'Stealth mode: on or off', parseStealthMode)
@@ -419,14 +420,18 @@ amazon
   .option('--pretty', 'Pretty-print JSON')
   .action(handleAmazonStatusCommand);
 
-const ebay = program.command('ebay').description('Inspect eBay listing metadata, pricing, and seller signals.');
+const ebay = program.command('ebay').description('Inspect eBay listing metadata, pricing, seller, and review signals.');
 ebay
   .command('inspect')
   .argument('<input>', 'eBay listing URL/path or numeric item ID')
-  .option('--marketplace <value>', 'Marketplace domain or locale (for example: ebay.com, co.uk)')
+  .option('--no-reviews', 'Skip review extraction')
+  .option('--review-page-limit <number>', 'Maximum review pages to crawl', parseInt)
+  .option('--review-sort-by <mode>', 'recent or relevant', 'recent')
+  .option('--review-star <mode>', 'positive, neutral, negative, or all (critical kept for compatibility)', 'positive')
+  .option('--reviewer-type <type>', 'Reserved for parity with Amazon inspect options')
+  .option('--review-stop-at-id <id>', 'Stop review collection when this review ID is reached')
   .option('--timeout <ms>', 'Request timeout in milliseconds', parseInt)
   .option('--stealth <mode>', 'Stealth mode: on or off', parseStealthMode)
-  .option('--wait-for-selector <selector>', 'Selector to wait for before extraction')
   .option('--json', 'Output JSON')
   .option('-o, --output <path>', 'Write output to a file')
   .option('--pretty', 'Pretty-print JSON')

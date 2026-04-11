@@ -47,7 +47,7 @@ export function CustomDropdown({
             {isOpen && (
                 <>
                     <div className="fixed inset-0 z-[9998]" onClick={() => setIsOpen(false)} />
-                    <div className="absolute left-0 right-0 z-[9999] mt-2 overflow-hidden rounded-2xl border border-slate-200 bg-white">
+                    <div className="absolute left-0 right-0 top-full z-[9999] mt-2 overflow-hidden rounded-2xl border border-slate-200 bg-white">
                         {options.map((option) => {
                             const isSelected = option.value === value;
 

@@ -1,16 +1,20 @@
 'use client';
 
+import type { ComponentProps } from 'react';
 import { useMemo, useRef, useState } from 'react';
 import { ArrowDown01Icon, CheckmarkCircle02Icon } from '@hugeicons/core-free-icons';
 import { HugeiconsIcon } from '@hugeicons/react';
 import { cn } from '@/lib/utils';
+
+type DropdownIcon = ComponentProps<typeof HugeiconsIcon>['icon'];
 
 interface CustomDropdownProps {
     value: string;
     onChange: (value: string) => void;
     options: { value: string; label: string; suffix?: string }[];
     placeholder?: string;
-    icon?: any;
+    icon?: DropdownIcon;
+    disabled?: boolean;
 }
 
 export function CustomDropdown({
@@ -18,7 +22,8 @@ export function CustomDropdown({
     onChange,
     options,
     placeholder = 'Select...',
-    icon: Icon
+    icon: Icon,
+    disabled = false,
 }: CustomDropdownProps) {
     const [isOpen, setIsOpen] = useState(false);
     const selectedOption = options.find((option) => option.value === value);
@@ -29,6 +34,7 @@ export function CustomDropdown({
     const optionRefs = useRef<Array<HTMLButtonElement | null>>([]);
     const typeaheadBufferRef = useRef('');
     const typeaheadTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const isMenuOpen = isOpen && !disabled;
 
     const focusOptionAtIndex = (index: number) => {
         const option = optionRefs.current[index];
@@ -83,11 +89,20 @@ export function CustomDropdown({
         <div className="relative">
             <button
                 type="button"
-                onClick={() => setIsOpen((open) => !open)}
+                onClick={() => {
+                    if (disabled) {
+                        return;
+                    }
+                    setIsOpen((open) => !open);
+                }}
                 onKeyDown={(event) => {
+                    if (disabled) {
+                        return;
+                    }
+
                     if (event.key === 'ArrowDown') {
                         event.preventDefault();
-                        if (!isOpen) {
+                        if (!isMenuOpen) {
                             setIsOpen(true);
                             requestAnimationFrame(() =>
                                 focusOptionAtIndex(selectedIndex >= 0 ? selectedIndex : 0)
@@ -103,10 +118,13 @@ export function CustomDropdown({
                         handleTypeahead(event.key);
                     }
                 }}
+                disabled={disabled}
+                aria-expanded={isMenuOpen}
                 className={cn(
                     'ui-field flex h-11 w-full items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm outline-none transition-shadow focus:border-primary',
-                    isOpen && 'border-primary ring-2 ring-primary/20 shadow-[0_12px_30px_-18px_rgba(15,23,42,0.45)]',
-                    !selectedOption && 'text-muted-foreground'
+                    isMenuOpen && 'border-primary ring-2 ring-primary/20 shadow-[0_12px_30px_-18px_rgba(15,23,42,0.45)]',
+                    !selectedOption && 'text-muted-foreground',
+                    disabled && 'cursor-not-allowed bg-slate-100 text-slate-400 opacity-70'
                 )}
             >
                 <div className="flex items-center gap-2 overflow-hidden">
@@ -123,15 +141,15 @@ export function CustomDropdown({
                 <HugeiconsIcon
                     icon={ArrowDown01Icon}
                     size={16}
-                    className={cn('text-slate-400', isOpen && 'rotate-180')}
+                    className={cn('text-slate-400', isMenuOpen && 'rotate-180', disabled && 'text-slate-300')}
                 />
             </button>
 
-            {isOpen && (
+            {isMenuOpen && (
                 <>
                     <div className="fixed inset-0 z-[50]" onClick={() => setIsOpen(false)} />
                     <div
-                        className="ui-panel absolute left-0 right-0 z-[60] mt-2 max-h-60 overflow-y-auto overscroll-contain rounded-xl border border-slate-200 bg-white py-1 pr-1 shadow-[0_22px_50px_-24px_rgba(15,23,42,0.38)] [scrollbar-color:rgba(148,163,184,0.9)_transparent] [scrollbar-gutter:stable] [scrollbar-width:thin]"
+                        className="ui-panel absolute left-0 right-0 top-full z-[60] mt-2 max-h-60 overflow-y-auto overscroll-contain rounded-xl border border-slate-200 bg-white py-1 pr-1 shadow-[0_22px_50px_-24px_rgba(15,23,42,0.38)] [scrollbar-color:rgba(148,163,184,0.9)_transparent] [scrollbar-gutter:stable] [scrollbar-width:thin]"
                         onKeyDown={(event) => {
                             if (event.key === 'Escape') {
                                 setIsOpen(false);

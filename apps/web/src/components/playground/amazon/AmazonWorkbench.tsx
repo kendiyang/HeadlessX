@@ -17,6 +17,7 @@ import {
     ResultsPanelShell,
     WorkbenchLayout,
 } from '../shared';
+import { CustomDropdown } from '@/components/ui/CustomDropdown';
 
 interface AmazonWorkbenchProps {
     available: boolean;
@@ -33,6 +34,19 @@ type AmazonApiResponse = {
             code?: string;
         };
 };
+
+type AmazonReviewStar = 'all' | 'positive' | 'critical';
+
+const MAX_REVIEW_PAGES = 5000;
+const REVIEW_SORT_OPTIONS = [
+    { value: 'recent', label: 'recent (default)' },
+    { value: 'helpful', label: 'helpful' },
+];
+const REVIEW_STAR_OPTIONS = [
+    { value: 'all', label: 'all' },
+    { value: 'positive', label: 'positive' },
+    { value: 'critical', label: 'critical' },
+];
 
 function readErrorMessage(response: AmazonApiResponse, status: number): string {
     if (typeof response.error === 'string' && response.error.trim()) {
@@ -58,8 +72,9 @@ function ResultStat({ label, value }: { label: string; value: string | number })
 export function AmazonWorkbench({ available, unavailableReason }: AmazonWorkbenchProps) {
     const [input, setInput] = useState('');
     const [includeReviews, setIncludeReviews] = useState(true);
-    const [reviewPageLimit, setReviewPageLimit] = useState(3);
+    const [reviewPageLimit, setReviewPageLimit] = useState(1);
     const [reviewSortBy, setReviewSortBy] = useState<'recent' | 'helpful'>('recent');
+    const [reviewStar, setReviewStar] = useState<AmazonReviewStar>('all');
     const [stealth, setStealth] = useState(true);
     const [isPending, setIsPending] = useState(false);
     const [result, setResult] = useState<AmazonApiResponse | null>(null);
@@ -95,15 +110,31 @@ export function AmazonWorkbench({ available, unavailableReason }: AmazonWorkbenc
             return null;
         }
 
+        const topLevelReviews = Array.isArray(inspectData.reviews) ? inspectData.reviews.length : 0;
+        const priceValue =
+            inspectData.price?.value ??
+            inspectData.pricing?.currentPrice ??
+            inspectData.pricing?.dealPrice ??
+            inspectData.pricing?.listPrice ??
+            null;
+        const priceCurrency = inspectData.price?.currency || '';
+        const currentPrice =
+            priceValue !== null && priceValue !== undefined
+                ? `${priceCurrency}${priceValue}`
+                : inspectData.pricing?.currentPriceText ||
+                inspectData.pricing?.dealPriceText ||
+                inspectData.pricing?.listPriceText ||
+                'n/a';
+
         return {
             asin: inspectData.asin || 'n/a',
-            title: inspectData.product?.title || 'Untitled product',
-            currentPrice: inspectData.pricing?.currentPriceText || inspectData.pricing?.currentPrice || 'n/a',
-            reviews: inspectData.reviews?.totalCollected ?? 0,
-            pages: inspectData.reviews?.pagesCrawled ?? 0,
-            marketplace: inspectData.marketplace?.domain || 'n/a',
+            title: inspectData.title || inspectData.product?.title || 'Untitled product',
+            currentPrice,
+            reviews: topLevelReviews,
+            pages: includeReviews ? reviewPageLimit : 0,
+            reviewStar: includeReviews ? reviewStar : 'all',
         };
-    }, [inspectData]);
+    }, [includeReviews, inspectData, reviewPageLimit, reviewStar]);
 
     const resetPendingState = () => {
         setIsPending(false);
@@ -142,6 +173,7 @@ export function AmazonWorkbench({ available, unavailableReason }: AmazonWorkbenc
                     includeReviews,
                     reviewPageLimit,
                     reviewSortBy,
+                    reviewStar,
                     stealth,
                 }),
                 signal: abortControllerRef.current.signal,
@@ -173,7 +205,7 @@ export function AmazonWorkbench({ available, unavailableReason }: AmazonWorkbenc
             header={
                 <PlaygroundHeaderShell
                     title="Amazon"
-                    description="Inspect product, pricing, review, and marketplace data for catalog and pricing research."
+                    description="Inspect product, pricing, seller, and review data for catalog and pricing research."
                     iconSlot={
                         <div className="absolute inset-0 flex items-center justify-center rounded-2xl border border-amber-100 bg-[radial-gradient(circle_at_top_left,_rgba(245,158,11,0.2),_transparent_58%),radial-gradient(circle_at_bottom_right,_rgba(249,115,22,0.16),_transparent_54%),linear-gradient(135deg,rgba(255,255,255,1),rgba(255,251,235,1))]">
                             <Image src="/icons/amazon.svg" alt="Amazon" width={24} height={24} className="h-6 w-6" />
@@ -264,24 +296,43 @@ export function AmazonWorkbench({ available, unavailableReason }: AmazonWorkbenc
                                 <input
                                     type="number"
                                     min={1}
-                                    max={10}
+                                    max={MAX_REVIEW_PAGES}
                                     value={reviewPageLimit}
-                                    onChange={(event) => setReviewPageLimit(Math.max(1, Math.min(10, Number(event.target.value) || 1)))}
+                                    onChange={(event) =>
+                                        setReviewPageLimit(
+                                            Math.max(1, Math.min(MAX_REVIEW_PAGES, Number(event.target.value) || 1))
+                                        )
+                                    }
+                                    disabled={!includeReviews}
                                     className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-900 outline-none transition-colors hover:border-slate-300 hover:bg-white focus:border-slate-400"
                                 />
                             </div>
 
                             <div className="space-y-2">
                                 <label className="text-xs font-bold uppercase tracking-[0.2em] text-slate-400">Review sort</label>
-                                <select
+                                <CustomDropdown
                                     value={reviewSortBy}
-                                    onChange={(event) => setReviewSortBy(event.target.value === 'helpful' ? 'helpful' : 'recent')}
-                                    className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-900 outline-none transition-colors hover:border-slate-300 hover:bg-white focus:border-slate-400"
-                                >
-                                    <option value="recent">recent</option>
-                                    <option value="helpful">helpful</option>
-                                </select>
+                                    onChange={(nextValue) => setReviewSortBy(nextValue === 'helpful' ? 'helpful' : 'recent')}
+                                    options={REVIEW_SORT_OPTIONS}
+                                    disabled={!includeReviews}
+                                />
                             </div>
+                        </div>
+
+                        <div className="space-y-2">
+                            <label className="text-xs font-bold uppercase tracking-[0.2em] text-slate-400">Review Star</label>
+                            <CustomDropdown
+                                value={reviewStar}
+                                onChange={(nextValue) =>
+                                    setReviewStar(
+                                        nextValue === 'positive' || nextValue === 'critical'
+                                            ? nextValue
+                                            : 'all'
+                                    )
+                                }
+                                options={REVIEW_STAR_OPTIONS}
+                                disabled={!includeReviews}
+                            />
                         </div>
 
                         <div className="grid gap-3 sm:grid-cols-2">
@@ -352,7 +403,9 @@ export function AmazonWorkbench({ available, unavailableReason }: AmazonWorkbenc
                             <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
                                 <div className="text-xs font-bold uppercase tracking-[0.2em] text-slate-400">Product</div>
                                 <div className="mt-2 text-sm font-semibold text-slate-900">{summary.title}</div>
-                                <div className="mt-1 text-xs text-slate-500">Marketplace: {summary.marketplace} • Review Pages: {summary.pages}</div>
+                                <div className="mt-1 text-xs text-slate-500">
+                                    Review Pages: {summary.pages} • Review Star: {summary.reviewStar}
+                                </div>
                             </div>
 
                             <div className="rounded-2xl border border-slate-200 bg-slate-950 p-4">
@@ -371,7 +424,7 @@ export function AmazonWorkbench({ available, unavailableReason }: AmazonWorkbenc
                         <PlaygroundEmptyState
                             icon={Search01Icon}
                             title="Ready to inspect"
-                            body="Run an Amazon inspect request to see product, pricing, reviews, and marketplace data here."
+                            body="Run an Amazon inspect request to see product, pricing, seller, and review data here."
                         />
                     )}
                 </ResultsPanelShell>

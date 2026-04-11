@@ -27,6 +27,11 @@ interface MarketplaceInspectWorkbenchProps {
     idStatLabel: string;
     available: boolean;
     unavailableReason?: string | null;
+    supportsReviews?: boolean;
+    reviewPageLimitMax?: number;
+    showMarketplaceInput?: boolean;
+    showWaitForSelectorInput?: boolean;
+    showTimeoutInput?: boolean;
 }
 
 type MarketplaceApiResponse = {
@@ -71,9 +76,19 @@ export function MarketplaceInspectWorkbench({
     idStatLabel,
     available,
     unavailableReason,
+    supportsReviews = false,
+    reviewPageLimitMax = 5000,
+    showMarketplaceInput = true,
+    showWaitForSelectorInput = true,
+    showTimeoutInput = true,
 }: MarketplaceInspectWorkbenchProps) {
     const [input, setInput] = useState('');
     const [marketplace, setMarketplace] = useState('');
+    const [includeReviews, setIncludeReviews] = useState(true);
+    const [reviewPageLimit, setReviewPageLimit] = useState(1);
+    const [reviewSortBy, setReviewSortBy] = useState<'recent' | 'relevant'>('recent');
+    const [reviewStar, setReviewStar] = useState<'positive' | 'neutral' | 'negative'>('positive');
+    const [reviewStopAtId, setReviewStopAtId] = useState('');
     const [stealth, setStealth] = useState(true);
     const [timeout, setTimeoutValue] = useState(60000);
     const [waitForSelector, setWaitForSelector] = useState('');
@@ -85,6 +100,7 @@ export function MarketplaceInspectWorkbench({
 
     const abortControllerRef = useRef<AbortController | null>(null);
     const inspectData = result?.data;
+    const showInlineReviewsToggle = supportsReviews && !showTimeoutInput;
 
     useEffect(() => {
         let interval: ReturnType<typeof setInterval> | undefined;
@@ -110,13 +126,33 @@ export function MarketplaceInspectWorkbench({
             return null;
         }
 
-        const entity = inspectData.item || inspectData.product || {};
-        const recordId = inspectData.item?.itemId || inspectData.product?.productId || 'n/a';
+        const entity = inspectData.item || inspectData.product || inspectData || {};
+        const recordId = inspectData.item?.itemId || inspectData.product?.productId || inspectData.asin || 'n/a';
         const title = entity.title || 'Untitled';
-        const price = entity.priceText || entity.price || 'n/a';
-        const seller = entity.seller || 'n/a';
-        const marketplaceDomain = inspectData.marketplace?.domain || 'n/a';
-        const blocked = inspectData.diagnostics?.blocked ? 'yes' : 'no';
+        const priceValue = typeof entity.price === 'object' && entity.price
+            ? entity.price.value
+            : entity.price;
+        const priceCurrency = typeof entity.price === 'object' && entity.price
+            ? entity.price.currency
+            : null;
+        const price = entity.priceText || (priceValue !== undefined && priceValue !== null
+            ? `${priceCurrency || ''}${priceValue}`
+            : 'n/a');
+        const seller = typeof entity.seller === 'object' && entity.seller
+            ? entity.seller.name || 'n/a'
+            : entity.seller || 'n/a';
+        const marketplaceDomain = inspectData.marketplace?.domain || (() => {
+            try {
+                return inspectData.url ? new URL(inspectData.url).hostname : 'n/a';
+            } catch {
+                return 'n/a';
+            }
+        })();
+        const blocked = inspectData.diagnostics?.blocked === true
+            ? 'yes'
+            : inspectData.diagnostics?.blocked === false
+                ? 'no'
+                : 'n/a';
         const signalCount = Array.isArray(inspectData.diagnostics?.antiBotSignals)
             ? inspectData.diagnostics.antiBotSignals.length
             : 0;
@@ -166,10 +202,21 @@ export function MarketplaceInspectWorkbench({
                 },
                 body: JSON.stringify({
                     input: input.trim(),
-                    ...(marketplace.trim() ? { marketplace: marketplace.trim() } : {}),
-                    timeout,
+                    ...(showMarketplaceInput && marketplace.trim() ? { marketplace: marketplace.trim() } : {}),
+                    ...(supportsReviews
+                        ? {
+                            includeReviews,
+                            reviewPageLimit: Math.max(1, Math.min(reviewPageLimitMax, reviewPageLimit || 1)),
+                            reviewSortBy,
+                            reviewStar,
+                            ...(reviewStopAtId.trim() ? { reviewStopAtId: reviewStopAtId.trim() } : {}),
+                        }
+                        : {}),
+                    ...(showTimeoutInput ? { timeout } : {}),
                     stealth,
-                    ...(waitForSelector.trim() ? { waitForSelector: waitForSelector.trim() } : {}),
+                    ...(showWaitForSelectorInput && waitForSelector.trim()
+                        ? { waitForSelector: waitForSelector.trim() }
+                        : {}),
                 }),
                 signal: abortControllerRef.current.signal,
             });
@@ -265,31 +312,47 @@ export function MarketplaceInspectWorkbench({
                             />
                         </div>
 
-                        <div className="space-y-2">
-                            <label className="text-xs font-bold uppercase tracking-[0.2em] text-slate-400">
-                                Marketplace
-                            </label>
-                            <input
-                                type="text"
-                                value={marketplace}
-                                onChange={(event) => setMarketplace(event.target.value)}
-                                placeholder={marketplacePlaceholder}
-                                className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-900 outline-none transition-colors placeholder:text-slate-400 hover:border-slate-300 hover:bg-white focus:border-slate-400"
-                            />
-                        </div>
-
-                        <div className="grid gap-3 sm:grid-cols-2">
+                        {showMarketplaceInput && (
                             <div className="space-y-2">
-                                <label className="text-xs font-bold uppercase tracking-[0.2em] text-slate-400">Timeout (ms)</label>
+                                <label className="text-xs font-bold uppercase tracking-[0.2em] text-slate-400">
+                                    Marketplace
+                                </label>
                                 <input
-                                    type="number"
-                                    min={5000}
-                                    max={180000}
-                                    value={timeout}
-                                    onChange={(event) => setTimeoutValue(Math.max(5000, Math.min(180000, Number(event.target.value) || 5000)))}
-                                    className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-900 outline-none transition-colors hover:border-slate-300 hover:bg-white focus:border-slate-400"
+                                    type="text"
+                                    value={marketplace}
+                                    onChange={(event) => setMarketplace(event.target.value)}
+                                    placeholder={marketplacePlaceholder}
+                                    className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-900 outline-none transition-colors placeholder:text-slate-400 hover:border-slate-300 hover:bg-white focus:border-slate-400"
                                 />
                             </div>
+                        )}
+
+                        <div className="grid gap-3 sm:grid-cols-2">
+                            {showTimeoutInput ? (
+                                <div className="space-y-2">
+                                    <label className="text-xs font-bold uppercase tracking-[0.2em] text-slate-400">Timeout (ms)</label>
+                                    <input
+                                        type="number"
+                                        min={5000}
+                                        max={180000}
+                                        value={timeout}
+                                        onChange={(event) => setTimeoutValue(Math.max(5000, Math.min(180000, Number(event.target.value) || 5000)))}
+                                        className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-900 outline-none transition-colors hover:border-slate-300 hover:bg-white focus:border-slate-400"
+                                    />
+                                </div>
+                            ) : showInlineReviewsToggle ? (
+                                <label className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-medium text-slate-700">
+                                    <input
+                                        type="checkbox"
+                                        className="h-4 w-4 rounded border-slate-300"
+                                        checked={includeReviews}
+                                        onChange={(event) => setIncludeReviews(event.target.checked)}
+                                    />
+                                    Include reviews
+                                </label>
+                            ) : (
+                                <div />
+                            )}
                             <label className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-medium text-slate-700">
                                 <input
                                     type="checkbox"
@@ -301,16 +364,94 @@ export function MarketplaceInspectWorkbench({
                             </label>
                         </div>
 
-                        <div className="space-y-2">
-                            <label className="text-xs font-bold uppercase tracking-[0.2em] text-slate-400">Wait Selector (optional)</label>
-                            <input
-                                type="text"
-                                value={waitForSelector}
-                                onChange={(event) => setWaitForSelector(event.target.value)}
-                                placeholder="example: [data-testid='price']"
-                                className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-900 outline-none transition-colors placeholder:text-slate-400 hover:border-slate-300 hover:bg-white focus:border-slate-400"
-                            />
-                        </div>
+                        {supportsReviews && (
+                            <div className="space-y-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                                <div className="text-xs font-bold uppercase tracking-[0.2em] text-slate-500">Review Options</div>
+
+                                {!showInlineReviewsToggle && (
+                                    <label className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700">
+                                        <input
+                                            type="checkbox"
+                                            className="h-4 w-4 rounded border-slate-300"
+                                            checked={includeReviews}
+                                            onChange={(event) => setIncludeReviews(event.target.checked)}
+                                        />
+                                        Include reviews
+                                    </label>
+                                )}
+
+                                <div className="grid gap-3 sm:grid-cols-2">
+                                    <div className="space-y-2">
+                                        <label className="text-xs font-bold uppercase tracking-[0.2em] text-slate-400">Review pages</label>
+                                        <input
+                                            type="number"
+                                            min={1}
+                                            max={reviewPageLimitMax}
+                                            value={reviewPageLimit}
+                                            disabled={!includeReviews}
+                                            onChange={(event) =>
+                                                setReviewPageLimit(
+                                                    Math.max(1, Math.min(reviewPageLimitMax, Number(event.target.value) || 1))
+                                                )
+                                            }
+                                            className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-900 outline-none transition-colors hover:border-slate-300 focus:border-slate-400 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
+                                        />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label className="text-xs font-bold uppercase tracking-[0.2em] text-slate-400">Review sort</label>
+                                        <select
+                                            value={reviewSortBy}
+                                            disabled={!includeReviews}
+                                            onChange={(event) => setReviewSortBy(event.target.value as 'recent' | 'relevant')}
+                                            className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-900 outline-none transition-colors hover:border-slate-300 focus:border-slate-400 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
+                                        >
+                                            <option value="recent">recent</option>
+                                            <option value="relevant">relevant</option>
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <div className="grid gap-3 sm:grid-cols-2">
+                                    <div className="space-y-2">
+                                        <label className="text-xs font-bold uppercase tracking-[0.2em] text-slate-400">Rating type</label>
+                                        <select
+                                            value={reviewStar}
+                                            disabled={!includeReviews}
+                                            onChange={(event) => setReviewStar(event.target.value as 'positive' | 'neutral' | 'negative')}
+                                            className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-900 outline-none transition-colors hover:border-slate-300 focus:border-slate-400 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
+                                        >
+                                            <option value="positive">Positive</option>
+                                            <option value="neutral">Neutral</option>
+                                            <option value="negative">Negative</option>
+                                        </select>
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label className="text-xs font-bold uppercase tracking-[0.2em] text-slate-400">Review stop ID</label>
+                                        <input
+                                            type="text"
+                                            value={reviewStopAtId}
+                                            disabled={!includeReviews}
+                                            onChange={(event) => setReviewStopAtId(event.target.value)}
+                                            placeholder="optional"
+                                            className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-900 outline-none transition-colors placeholder:text-slate-400 hover:border-slate-300 focus:border-slate-400 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {showWaitForSelectorInput && (
+                            <div className="space-y-2">
+                                <label className="text-xs font-bold uppercase tracking-[0.2em] text-slate-400">Wait Selector (optional)</label>
+                                <input
+                                    type="text"
+                                    value={waitForSelector}
+                                    onChange={(event) => setWaitForSelector(event.target.value)}
+                                    placeholder="example: [data-testid='price']"
+                                    className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-900 outline-none transition-colors placeholder:text-slate-400 hover:border-slate-300 hover:bg-white focus:border-slate-400"
+                                />
+                            </div>
+                        )}
 
                         <div className="grid gap-3 sm:grid-cols-2">
                             <button

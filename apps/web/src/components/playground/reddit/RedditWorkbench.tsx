@@ -16,6 +16,7 @@ import {
     ResultsPanelShell,
     WorkbenchLayout,
 } from '../shared';
+import { CustomDropdown } from '@/components/ui/CustomDropdown';
 
 interface RedditWorkbenchProps {
     available: boolean;
@@ -92,6 +93,14 @@ const SORT_OPTIONS = [
 ] as const;
 
 const TIMEFRAME_OPTIONS = ['none', 'hour', 'day', 'week', 'month', 'year', 'all'] as const;
+const SORT_DROPDOWN_OPTIONS = SORT_OPTIONS.map((option) => ({
+    value: option,
+    label: option,
+}));
+const TIMEFRAME_DROPDOWN_OPTIONS = TIMEFRAME_OPTIONS.map((option) => ({
+    value: option,
+    label: option,
+}));
 
 export function RedditWorkbench({ available, unavailableReason }: RedditWorkbenchProps) {
     const [input, setInput] = useState('');
@@ -306,31 +315,19 @@ export function RedditWorkbench({ available, unavailableReason }: RedditWorkbenc
                         <div className="grid gap-3 sm:grid-cols-2">
                             <div className="space-y-2">
                                 <label className="text-xs font-bold uppercase tracking-[0.2em] text-slate-400">Sort</label>
-                                <select
+                                <CustomDropdown
                                     value={sort}
-                                    onChange={(event) => setSort(event.target.value)}
-                                    className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-900 outline-none transition-colors hover:border-slate-300 hover:bg-white focus:border-slate-400"
-                                >
-                                    {SORT_OPTIONS.map((option) => (
-                                        <option key={option} value={option}>
-                                            {option}
-                                        </option>
-                                    ))}
-                                </select>
+                                    onChange={setSort}
+                                    options={SORT_DROPDOWN_OPTIONS}
+                                />
                             </div>
                             <div className="space-y-2">
                                 <label className="text-xs font-bold uppercase tracking-[0.2em] text-slate-400">Timeframe</label>
-                                <select
+                                <CustomDropdown
                                     value={timeframe}
-                                    onChange={(event) => setTimeframe(event.target.value)}
-                                    className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-900 outline-none transition-colors hover:border-slate-300 hover:bg-white focus:border-slate-400"
-                                >
-                                    {TIMEFRAME_OPTIONS.map((option) => (
-                                        <option key={option} value={option}>
-                                            {option}
-                                        </option>
-                                    ))}
-                                </select>
+                                    onChange={setTimeframe}
+                                    options={TIMEFRAME_DROPDOWN_OPTIONS}
+                                />
                             </div>
                         </div>
 

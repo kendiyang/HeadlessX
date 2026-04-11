@@ -5,10 +5,14 @@ import { ebayService, EbayServiceError } from '../../services/commerce/EbayServi
 
 const EbayInspectSchema = z.object({
     input: z.string().trim().min(1).max(512),
-    marketplace: z.string().trim().min(2).max(64).optional(),
+    includeReviews: z.boolean().optional(),
+    reviewPageLimit: z.number().int().min(1).max(5000).optional(),
+    reviewSortBy: z.enum(['recent', 'relevant', 'helpful']).optional(),
+    reviewStar: z.enum(['all', 'positive', 'neutral', 'negative', 'critical']).optional(),
+    reviewerType: z.string().trim().min(1).max(64).optional(),
+    reviewStopAtId: z.string().trim().min(1).max(128).optional(),
     timeout: z.number().int().min(5000).max(180000).optional(),
     stealth: z.boolean().optional(),
-    waitForSelector: z.string().trim().min(1).max(256).optional(),
 });
 
 function normalizeError(error: unknown): {

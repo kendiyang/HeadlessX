@@ -178,7 +178,7 @@ Reddit inspect request fields:
 | --- | --- | --- | --- |
 | `POST` | `/api/operators/amazon/inspect` | Inspect Amazon product, pricing, reviews, and marketplace metadata | Accepts ASIN or Amazon URL/path input |
 | `GET` | `/api/operators/amazon/status` | Amazon operator status and defaults | Lightweight availability and defaults check |
-| `POST` | `/api/operators/ebay/inspect` | Inspect eBay listing metadata, pricing, and seller signals | Accepts eBay URL/path or numeric item ID |
+| `POST` | `/api/operators/ebay/inspect` | Inspect eBay listing metadata, pricing, seller, and review signals | Accepts eBay URL/path or numeric item ID |
 | `GET` | `/api/operators/ebay/status` | eBay operator status | Lightweight availability check |
 | `POST` | `/api/operators/walmart/inspect` | Inspect Walmart product metadata, pricing, and seller signals | Accepts Walmart URL/path or numeric product ID |
 | `GET` | `/api/operators/walmart/status` | Walmart operator status | Lightweight availability check |
@@ -190,30 +190,52 @@ Amazon inspect request fields:
 | `input` | `string` | Amazon product URL/path or 10-character ASIN |
 | `marketplace` | `string` | Optional marketplace override such as `amazon.com`, `com`, or `co.uk` |
 | `includeReviews` | `boolean` | Include review crawling (default `true`) |
-| `reviewPageLimit` | `number` | Maximum review pages to crawl, `1-10` |
-| `reviewSortBy` | `recent \\| helpful` | Review sort mode |
-| `reviewerType` | `string` | Amazon reviewer type (default `all_reviews`) |
+| `reviewPageLimit` | `number` | Maximum review pages to crawl, `1-5000` |
+| `reviewSortBy` | `recent \\| helpful` | Accepted for compatibility. Amazon review URLs are normalized to `recent` |
+| `reviewStar` | `all \\| positive \\| critical` | Review star selector mapped to Amazon `filterByStar` |
+| `reviewerType` | `string` | Accepted for compatibility. Amazon review URLs force `all_reviews` |
 | `reviewStopAtId` | `string` | Optional early stop marker review ID |
 | `timeout` | `number` | Request timeout in milliseconds |
 | `stealth` | `boolean` | Optional stealth toggle |
 | `waitForSelector` | `string` | Optional DOM selector wait before extraction |
 
-Amazon inspect diagnostics fields (`data.diagnostics`):
+Amazon inspect response fields (`data`):
 
 | Field | Type | Meaning |
 | --- | --- | --- |
-| `blocked` | `boolean` | Whether review crawling hit an Amazon anti-bot checkpoint |
-| `warnings` | `string[]` | Human-readable crawl warnings and partial-result notes |
-| `crawledUrls` | `string[]` | Distinct URLs crawled during this inspect run |
-| `antiBotSignals` | `string[]` | Matched anti-bot detection signals such as `url:/errors/validatecaptcha` |
-| `generatedAt` | `string` | ISO timestamp when the response payload was generated |
+| `title` | `string \\| null` | Product title |
+| `url` | `string` | Product URL (canonical when available) |
+| `asin` | `string \\| null` | Resolved ASIN |
+| `brand` | `string \\| null` | Product brand |
+| `price.value` | `number \\| null` | Best available numeric price |
+| `price.currency` | `string \\| null` | Price currency symbol (for example `$`, `€`) |
+| `reviewsCount` | `number \\| null` | Product ratings/reviews count from product/review summary |
+| `features` | `string[]` | Product feature bullets plus description snippet |
+| `seller.name` | `string \\| null` | Seller display name |
+| `seller.id` | `string \\| null` | Seller ID extracted from seller URL |
+| `seller.url` | `string \\| null` | Seller profile URL |
+| `reviews` | `array` | Collected review items |
 
-eBay and Walmart inspect request fields:
+eBay inspect request fields:
 
 | Field | Type | Meaning |
 | --- | --- | --- |
-| `input` | `string` | Marketplace URL/path or numeric item/product ID |
-| `marketplace` | `string` | Optional host override such as `ebay.com` or `walmart.com` |
+| `input` | `string` | eBay listing URL/path or numeric item ID |
+| `includeReviews` | `boolean` | Include review extraction (default `true`) |
+| `reviewPageLimit` | `number` | Maximum review pages to map into item cap, `1-5000` |
+| `reviewSortBy` | `recent \| helpful` | Review ordering mode |
+| `reviewStar` | `all \| positive \| critical` | Review star filter selector |
+| `reviewerType` | `string` | Reserved compatibility field |
+| `reviewStopAtId` | `string` | Optional early stop marker review ID |
+| `timeout` | `number` | Request timeout in milliseconds |
+| `stealth` | `boolean` | Optional stealth toggle |
+
+Walmart inspect request fields:
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `input` | `string` | Walmart product URL/path or numeric product ID |
+| `marketplace` | `string` | Optional host override such as `walmart.com` |
 | `timeout` | `number` | Request timeout in milliseconds |
 | `stealth` | `boolean` | Optional stealth toggle |
 | `waitForSelector` | `string` | Optional DOM selector wait before extraction |

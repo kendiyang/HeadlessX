@@ -39,6 +39,23 @@ describe('Marketplace service input validation', () => {
         );
     });
 
+    it('amazon rejects non-product amazon URLs', async () => {
+        const { amazonService, AmazonServiceError } = await import('./AmazonService');
+
+        await assert.rejects(
+            () =>
+                amazonService.inspect({
+                    input: 'https://www.amazon.com/s?k=headphones',
+                    includeReviews: false,
+                }),
+            (error: unknown) => {
+                assert.equal(error instanceof AmazonServiceError, true);
+                assert.equal((error as AmazonServiceError).code, 'INVALID_AMAZON_INPUT');
+                return true;
+            }
+        );
+    });
+
     it('ebay rejects deceptive hosts that only prefix-match ebay', async () => {
         const { ebayService, EbayServiceError } = await import('./EbayService');
 

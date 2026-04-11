@@ -12,13 +12,17 @@ export function registerEbayTools(server: McpServer, _context: McpToolContext) {
         'headlessx_ebay_inspect',
         {
             title: 'HeadlessX eBay Inspect',
-            description: 'Inspect eBay listing metadata, pricing, seller, and availability signals.',
+            description: 'Inspect eBay listing metadata, pricing, seller, availability, and review signals.',
             inputSchema: z.object({
                 input: z.string().trim().min(1),
-                marketplace: z.string().trim().min(2).max(64).optional(),
+                include_reviews: z.boolean().optional(),
+                review_page_limit: z.number().int().min(1).max(5000).optional(),
+                review_sort_by: z.enum(['recent', 'relevant', 'helpful']).optional(),
+                review_star: z.enum(['all', 'positive', 'neutral', 'negative', 'critical']).optional(),
+                reviewer_type: z.string().trim().min(1).max(64).optional(),
+                review_stop_at_id: z.string().trim().min(1).max(128).optional(),
                 timeout_ms: z.number().int().min(5000).max(180000).optional(),
                 stealth: z.boolean().optional(),
-                wait_for_selector: z.string().trim().min(1).max(256).optional(),
                 response_format: ResponseFormatSchema,
             }),
             outputSchema: GenericToolResultSchema,
@@ -28,10 +32,14 @@ export function registerEbayTools(server: McpServer, _context: McpToolContext) {
             try {
                 const result = await ebayService.inspect({
                     input: args.input,
-                    marketplace: args.marketplace,
+                    includeReviews: args.include_reviews,
+                    reviewPageLimit: args.review_page_limit,
+                    reviewSortBy: args.review_sort_by,
+                    reviewStar: args.review_star,
+                    reviewerType: args.reviewer_type,
+                    reviewStopAtId: args.review_stop_at_id,
                     timeout: args.timeout_ms,
                     stealth: args.stealth,
-                    waitForSelector: args.wait_for_selector,
                 });
 
                 return createToolSuccess(result, args.response_format, jsonTitleMarkdown('eBay Inspect', result));

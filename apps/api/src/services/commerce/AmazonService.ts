@@ -1,8 +1,9 @@
-import { JSDOM } from 'jsdom';
-import { scraperService } from '../scrape/ScraperService';
+import { JSDOM, VirtualConsole } from 'jsdom';
+import { scraperHttpService } from '../scrape/ScraperHttpService';
 import { antiBotDetectionService } from '../scrape/AntiBotDetectionService';
 
 export type AmazonReviewSortBy = 'recent' | 'helpful';
+export type AmazonReviewStar = 'all' | 'positive' | 'critical';
 
 export interface AmazonInspectInput {
     input: string;
@@ -10,6 +11,7 @@ export interface AmazonInspectInput {
     includeReviews?: boolean;
     reviewPageLimit?: number;
     reviewSortBy?: AmazonReviewSortBy;
+    reviewStar?: AmazonReviewStar;
     reviewerType?: string;
     reviewStopAtId?: string;
     timeout?: number;
@@ -82,6 +84,7 @@ export interface AmazonProductSnapshot {
 
 export interface AmazonMarketplaceSnapshot {
     sellerName: string | null;
+    sellerId: string | null;
     sellerProfileUrl: string | null;
     shipsFrom: string | null;
     soldBy: string | null;
@@ -93,37 +96,27 @@ export interface AmazonMarketplaceSnapshot {
     marketplaceId: string | null;
 }
 
-export interface AmazonReviewsSnapshot {
-    enabled: boolean;
-    sortBy: AmazonReviewSortBy;
-    reviewerType: string;
-    pagesRequested: number;
-    pagesCrawled: number;
-    totalCollected: number;
-    summary: AmazonReviewSummary;
-    items: AmazonReviewItem[];
-}
-
 export interface AmazonInspectResult {
     input: string;
+    title: string | null;
+    url: string;
     asin: string | null;
-    marketplace: {
-        domain: string;
-        locale: string;
-        host: string;
+    brand: string | null;
+    price: {
+        value: number | null;
+        currency: string | null;
     };
-    product: AmazonProductSnapshot;
-    pricing: AmazonPriceSnapshot;
-    reviews: AmazonReviewsSnapshot;
-    marketplaceData: AmazonMarketplaceSnapshot;
-    diagnostics: {
-        blocked: boolean;
-        warnings: string[];
-        crawledUrls: string[];
-        antiBotSignals: string[];
-        generatedAt: string;
+    reviewsCount: number | null;
+    features: string[];
+    seller: {
+        name: string | null;
+        id: string | null;
+        url: string | null;
     };
+    reviews: AmazonReviewItem[];
 }
+
+const JSDOM_SILENT_VIRTUAL_CONSOLE = new VirtualConsole();
 
 interface ProductPageParseResult {
     product: AmazonProductSnapshot;
@@ -141,13 +134,14 @@ interface ReviewPageParseResult {
 }
 
 const DEFAULT_AMAZON_HOST = 'www.amazon.com';
-const DEFAULT_REVIEWER_TYPE = 'all_reviews';
+const DEFAULT_REVIEW_STAR: AmazonReviewStar = 'all';
 const DEFAULT_REVIEW_SORT: AmazonReviewSortBy = 'recent';
-const DEFAULT_REVIEW_PAGE_LIMIT = 3;
-const MAX_REVIEW_PAGE_LIMIT = 10;
+const DEFAULT_REVIEW_PAGE_LIMIT = 1;
+const MAX_REVIEW_PAGE_LIMIT = 5000;
 const DEFAULT_SCRAPE_TIMEOUT_MS = 30_000;
-const MAX_REVIEW_REQUEST_TIMEOUT_MS = 45_000;
-const MAX_TOTAL_REVIEW_BUDGET_MS = 180_000;
+const PRODUCT_BLOCK_RETRY_ATTEMPTS = 2;
+const AMAZON_HTTP_DELAY_MIN_MS = 100;
+const AMAZON_HTTP_DELAY_MAX_MS = 500;
 
 const PRODUCT_TITLE_SELECTORS = [
     '#productTitle',
@@ -271,11 +265,49 @@ const REVIEW_SUMMARY_TOTAL_SELECTORS = [
     '#filter-info-section',
 ] as const;
 
+const ABOUT_ITEM_BULLET_SELECTORS = [
+    '#feature-bullets li span.a-list-item',
+    '#featurebullets_feature_div li span.a-list-item',
+    '#richProductInformation_feature_div li span.a-list-item',
+    '#productFactsDesktopExpander li span.a-list-item',
+    '#nic-po-expander-content li span.a-list-item',
+    '#pqv-feature-bullets li span.a-list-item',
+] as const;
+
+const PRODUCT_DESCRIPTION_SELECTORS = [
+    '#productDescription p',
+    '#productDescription span',
+    '#productDescription_feature_div p',
+    '#productDescription_feature_div li span.a-list-item',
+    '#pqv-description p',
+    '#pqv-description li span.a-list-item',
+    '#aplus p',
+] as const;
+
 const CURRENCY_SYMBOL_MAP: Record<string, string> = {
     '€': 'EUR',
     '£': 'GBP',
     '¥': 'JPY',
     '₹': 'INR',
+};
+
+const CURRENCY_CODE_SYMBOL_MAP: Record<string, string> = {
+    USD: '$',
+    CAD: '$',
+    AUD: '$',
+    SGD: '$',
+    MXN: '$',
+    BRL: 'R$',
+    EUR: '€',
+    GBP: '£',
+    JPY: '¥',
+    INR: '₹',
+    SEK: 'kr',
+    PLN: 'zl',
+    TRY: 'TRY',
+    AED: 'AED',
+    SAR: 'SAR',
+    EGP: 'EGP',
 };
 
 const AMAZON_MARKETPLACE_SUFFIXES = [
@@ -474,6 +506,43 @@ function detectCurrency(value: string | null | undefined): string | null {
     return null;
 }
 
+function detectCurrencySymbol(value: string | null | undefined): string | null {
+    const normalized = cleanText(value);
+    if (!normalized) {
+        return null;
+    }
+
+    const qualifiedDollar = normalized.match(/(CA\$|A\$|S\$|MX\$|R\$)/i);
+    if (qualifiedDollar?.[1]) {
+        return qualifiedDollar[1].toUpperCase();
+    }
+
+    const symbol = normalized.match(/[$€£¥₹]/);
+    if (symbol?.[0]) {
+        return symbol[0];
+    }
+
+    return null;
+}
+
+function currencyCodeToSymbol(currency: string | null | undefined): string | null {
+    const normalized = cleanText(currency).toUpperCase();
+    if (!normalized) {
+        return null;
+    }
+
+    return CURRENCY_CODE_SYMBOL_MAP[normalized] || null;
+}
+
+function resolvePriceCurrencySymbol(pricing: AmazonPriceSnapshot): string | null {
+    return (
+        detectCurrencySymbol(pricing.currentPriceText) ||
+        detectCurrencySymbol(pricing.dealPriceText) ||
+        detectCurrencySymbol(pricing.listPriceText) ||
+        currencyCodeToSymbol(pricing.currency)
+    );
+}
+
 function dedupeStrings(values: Array<string | null | undefined>): string[] {
     return Array.from(new Set(values.map((value) => cleanText(value)).filter(Boolean)));
 }
@@ -573,36 +642,32 @@ function parseAmazonHostFromInput(input?: string | null): string | null {
 }
 
 function resolveAmazonHost(marketplace?: string, sourceInput?: string): string | null {
+    const normalizedMarketplace = cleanText(marketplace)?.toLowerCase();
+    if (normalizedMarketplace) {
+        const marketplaceHost = parseAmazonHostFromInput(normalizedMarketplace);
+        if (marketplaceHost) {
+            return marketplaceHost;
+        }
+
+        const localeSuffix = AMAZON_LOCALE_SUFFIX_MAP[normalizedMarketplace];
+        if (localeSuffix) {
+            return `amazon.${localeSuffix}`;
+        }
+
+        const asSuffix = normalizedMarketplace as (typeof AMAZON_MARKETPLACE_SUFFIXES)[number];
+        if (AMAZON_MARKETPLACE_SUFFIXES.includes(asSuffix)) {
+            return `amazon.${asSuffix}`;
+        }
+
+        return null;
+    }
+
     const fromInput = parseAmazonHostFromInput(sourceInput);
     if (fromInput) {
         return fromInput;
     }
 
-    const normalizedMarketplace = cleanText(marketplace)?.toLowerCase();
-    if (!normalizedMarketplace) {
-        return DEFAULT_AMAZON_HOST.replace(/^www\./, '');
-    }
-
-    const marketplaceHost = parseAmazonHostFromInput(normalizedMarketplace);
-    if (marketplaceHost) {
-        return marketplaceHost;
-    }
-
-    const localeSuffix = AMAZON_LOCALE_SUFFIX_MAP[normalizedMarketplace];
-    if (localeSuffix) {
-        return `amazon.${localeSuffix}`;
-    }
-
-    const asSuffix = normalizedMarketplace as (typeof AMAZON_MARKETPLACE_SUFFIXES)[number];
-    if (AMAZON_MARKETPLACE_SUFFIXES.includes(asSuffix)) {
-        return `amazon.${asSuffix}`;
-    }
-
-    return null;
-}
-
-function extractLocaleFromHost(host: string): string {
-    return getAmazonSuffixFromHost(host) || 'com';
+    return DEFAULT_AMAZON_HOST;
 }
 
 function currencyFromMarketplaceHost(host: string): string | null {
@@ -669,6 +734,49 @@ function parseReviewIdFromLink(link: string | null): string | null {
     }
 
     return match[1].toUpperCase();
+}
+
+function matchReviewStarSelection(review: AmazonReviewItem, reviewStar: AmazonReviewStar): boolean {
+    const rating = review.rating;
+    if (!rating || reviewStar === 'all') {
+        return true;
+    }
+
+    // Keep the existing business mapping semantics:
+    // positive -> critical bucket, critical -> positive bucket.
+    if (reviewStar === 'positive') {
+        return rating <= 3;
+    }
+
+    if (reviewStar === 'critical') {
+        return rating >= 4;
+    }
+
+    return true;
+}
+
+function extractSellerIdFromUrl(profileUrl: string | null): string | null {
+    const normalized = cleanText(profileUrl);
+    if (!normalized) {
+        return null;
+    }
+
+    try {
+        const parsed = new URL(normalized);
+        const fromQuery = parsed.searchParams.get('seller');
+        if (fromQuery) {
+            return fromQuery;
+        }
+    } catch {
+        // Fallback to regex path parsing for malformed URLs.
+    }
+
+    const regexMatch = normalized.match(/[?&]seller=([A-Z0-9]+)/i);
+    if (regexMatch?.[1]) {
+        return regexMatch[1].toUpperCase();
+    }
+
+    return null;
 }
 
 function parseCountryFromReviewDate(dateText: string | null): string | null {
@@ -836,33 +944,79 @@ function parseHistogram(document: Document): AmazonReviewHistogramEntry[] {
     return histogram;
 }
 
+function parseAboutItemBullets(document: Document): string[] {
+    return dedupeStrings(
+        (Array.from(document.querySelectorAll(ABOUT_ITEM_BULLET_SELECTORS.join(','))) as Element[])
+            .map((node) => cleanText(node.textContent))
+            .filter((value) => {
+                const lowered = value.toLowerCase();
+                return (
+                    value.length > 3 &&
+                    value !== '/' &&
+                    !lowered.includes('make sure this fits')
+                );
+            })
+    );
+}
+
+function parseProductDescriptionText(document: Document): string | null {
+    const values = dedupeStrings(
+        (Array.from(document.querySelectorAll(PRODUCT_DESCRIPTION_SELECTORS.join(','))) as Element[])
+            .map((node) => cleanText(node.textContent))
+            .filter((value) => value.length > 8)
+    );
+
+    if (values.length === 0) {
+        return null;
+    }
+
+    return values.join(' ');
+}
+
 function resolveInputUrl(input: string, host: string): string | null {
     const normalized = cleanText(input);
     if (!normalized) {
         return null;
     }
 
+    if (/^[A-Z0-9]{10}$/i.test(normalized)) {
+        return `https://${host}/dp/${normalized.toUpperCase()}?th=1`;
+    }
+
+    if (normalized.startsWith('/')) {
+        const pathAsin = extractAsin(normalized);
+        if (pathAsin) {
+            return `https://${host}/dp/${pathAsin}?th=1`;
+        }
+    }
+
+    let candidateUrl: string | null = null;
+
     if (/^https?:\/\//i.test(normalized)) {
         try {
             const parsed = new URL(normalized);
-            return isAllowedAmazonHost(parsed.hostname) ? parsed.toString() : null;
+            candidateUrl = isAllowedAmazonHost(parsed.hostname) ? parsed.toString() : null;
         } catch {
             return null;
         }
     }
 
-    if (/amazon\./i.test(normalized)) {
+    if (!candidateUrl && /amazon\./i.test(normalized)) {
         try {
             const parsed = new URL(`https://${normalized.replace(/^\/+/, '')}`);
-            return isAllowedAmazonHost(parsed.hostname) ? parsed.toString() : null;
+            candidateUrl = isAllowedAmazonHost(parsed.hostname) ? parsed.toString() : null;
         } catch {
             return null;
         }
     }
 
-    const asin = extractAsin(normalized);
+    if (!candidateUrl) {
+        return null;
+    }
+
+    const asin = extractAsin(candidateUrl);
     if (asin) {
-        return `https://${host}/dp/${asin}`;
+        return `https://${host}/dp/${asin}?th=1`;
     }
 
     return null;
@@ -927,82 +1081,20 @@ class AmazonService {
                 includeReviews: true,
                 reviewPageLimit: DEFAULT_REVIEW_PAGE_LIMIT,
                 reviewSortBy: DEFAULT_REVIEW_SORT,
-                reviewerType: DEFAULT_REVIEWER_TYPE,
+                reviewStar: DEFAULT_REVIEW_STAR,
             },
             notes: [
                 'Amazon pages can return anti-bot checkpoints and captcha walls depending on IP/session trust.',
-                'Use a stable browser profile with warmed cookies for better review coverage on deeper pagination.',
+                'Review extraction runs directly on the fetched product page HTML (no extra review-page crawl).',
             ],
         };
     }
 
-    private buildReviewUrl(
-        host: string,
-        asin: string,
-        pageNumber: number,
-        sortBy: AmazonReviewSortBy,
-        reviewerType: string
-    ): string {
-        const url = new URL(`https://${host}/product-reviews/${asin}/ref=cm_cr_arp_d_viewopt_srt`);
-        url.searchParams.set('reviewerType', reviewerType);
-        url.searchParams.set('pageNumber', String(pageNumber));
-        url.searchParams.set('sortBy', sortBy);
-        return url.toString();
-    }
-
-    private normalizeReviewUrl(
-        rawUrl: string | null,
-        host: string,
-        asin: string,
-        sortBy: AmazonReviewSortBy,
-        reviewerType: string
-    ): string | null {
-        if (!rawUrl) {
-            return null;
-        }
-
-        const absolute = toAbsoluteUrl(rawUrl, `https://${host}/`, host);
-        if (!absolute) {
-            return null;
-        }
-
-        let parsed: URL;
-
-        try {
-            parsed = new URL(absolute);
-        } catch {
-            return null;
-        }
-
-        if (!isAllowedAmazonHost(parsed.hostname)) {
-            return null;
-        }
-
-        parsed.hostname = host;
-
-        if (!/\/product-reviews\//i.test(parsed.pathname)) {
-            if (/\/dp\//i.test(parsed.pathname) || /\/gp\/product\//i.test(parsed.pathname)) {
-                return this.buildReviewUrl(host, asin, 1, sortBy, reviewerType);
-            }
-
-            if (/reviews|review/i.test(parsed.pathname)) {
-                parsed.pathname = `/product-reviews/${asin}`;
-            }
-        }
-
-        if (/\/product-reviews\//i.test(parsed.pathname)) {
-            parsed.searchParams.set('sortBy', sortBy);
-            parsed.searchParams.set('reviewerType', reviewerType);
-            if (!parsed.searchParams.get('pageNumber')) {
-                parsed.searchParams.set('pageNumber', '1');
-            }
-        }
-
-        return parsed.toString();
-    }
-
     private parseProductPage(html: string, pageUrl: string, host: string, fallbackAsin: string | null): ProductPageParseResult {
-        const dom = new JSDOM(html, { url: pageUrl });
+        const dom = new JSDOM(html, {
+            url: pageUrl,
+            virtualConsole: JSDOM_SILENT_VIRTUAL_CONSOLE,
+        });
         const document = dom.window.document;
 
         const detailBullets = parseDetailBullets(document);
@@ -1045,6 +1137,11 @@ class AmazonService {
             merchantInfoParsed.soldBy;
 
         const sellerProfileLink = document.querySelector('#sellerProfileTriggerId, #merchant-info a[href*="seller"]');
+        const sellerProfileUrl = toAbsoluteUrl(
+            sellerProfileLink?.getAttribute('href') || null,
+            pageUrl,
+            host
+        );
 
         const fulfilledByAmazon =
             merchantInfoParsed.fulfilledByAmazon ??
@@ -1064,18 +1161,9 @@ class AmazonService {
             (Array.from(document.querySelectorAll('#wayfinding-breadcrumbs_feature_div li a')) as Element[]).map((node) => node.textContent)
         );
 
-        const featureBullets = dedupeStrings(
-            (Array.from(document.querySelectorAll('#feature-bullets li span.a-list-item, #feature-bullets li span')) as Element[])
-                .map((node) => node.textContent)
-                .filter((value) => {
-                    const normalized = cleanText(value).toLowerCase();
-                    return normalized.length > 3 && !normalized.includes('make sure this fits');
-                })
-        );
+        const featureBullets = parseAboutItemBullets(document);
 
-        const description =
-            selectText(document, ['#productDescription p', '#productDescription span', '#aplus p']) ||
-            null;
+        const description = parseProductDescriptionText(document);
 
         const currentPriceText = selectText(document, CURRENT_PRICE_SELECTORS);
         const listPriceText = selectText(document, LIST_PRICE_SELECTORS);
@@ -1140,11 +1228,8 @@ class AmazonService {
 
         const marketplaceData: AmazonMarketplaceSnapshot = {
             sellerName: soldBy,
-            sellerProfileUrl: toAbsoluteUrl(
-                sellerProfileLink?.getAttribute('href') || null,
-                pageUrl,
-                host
-            ),
+            sellerId: extractSellerIdFromUrl(sellerProfileUrl),
+            sellerProfileUrl,
             shipsFrom,
             soldBy,
             fulfilledByAmazon,
@@ -1162,7 +1247,10 @@ class AmazonService {
     }
 
     private parseReviewPage(html: string, pageUrl: string, host: string): ReviewPageParseResult {
-        const dom = new JSDOM(html, { url: pageUrl });
+        const dom = new JSDOM(html, {
+            url: pageUrl,
+            virtualConsole: JSDOM_SILENT_VIRTUAL_CONSOLE,
+        });
         const document = dom.window.document;
 
         const reviews = (Array.from(document.querySelectorAll(REVIEW_BLOCK_SELECTORS.join(','))) as Element[]).map((block) => {
@@ -1222,130 +1310,49 @@ class AmazonService {
         };
     }
 
-    private async collectReviews(input: {
+    private collectReviewsFromProductPage(input: {
+        html: string;
+        pageUrl: string;
         host: string;
-        asin: string;
-        startUrl: string;
-        reviewPageLimit: number;
-        reviewSortBy: AmazonReviewSortBy;
-        reviewerType: string;
+        reviewStar: AmazonReviewStar;
         reviewStopAtId?: string;
-        reviewTimeoutMs: number;
-        reviewBudgetMs: number;
-        stealth?: boolean;
-        waitForSelector?: string;
-        fallbackSummary: AmazonReviewSummary;
-    }): Promise<{
-        blocked: boolean;
-        warnings: string[];
-        crawledUrls: string[];
-        antiBotSignals: string[];
-        pagesCrawled: number;
+        reviewPageLimit: number;
+    }): {
         summary: AmazonReviewSummary;
         reviews: AmazonReviewItem[];
-    }> {
-        const warnings: string[] = [];
-        const crawledUrls: string[] = [];
-        const antiBotSignals: string[] = [];
+    } {
+        const parsed = this.parseReviewPage(input.html, input.pageUrl, input.host);
+        const reviewItemLimit = Math.max(
+            1,
+            Math.min((input.reviewPageLimit || DEFAULT_REVIEW_PAGE_LIMIT) * 10, MAX_REVIEW_PAGE_LIMIT)
+        );
         const seen = new Set<string>();
         const reviews: AmazonReviewItem[] = [];
-        let pagesCrawled = 0;
-        let blocked = false;
-        let currentUrl: string | null = input.startUrl;
-        let summary = input.fallbackSummary;
-        let shouldStop = false;
-        const deadline = Date.now() + input.reviewBudgetMs;
 
-        while (currentUrl && pagesCrawled < input.reviewPageLimit && !shouldStop) {
-            const remainingBudgetMs = deadline - Date.now();
-            if (remainingBudgetMs <= 0) {
-                warnings.push(
-                    `Review crawl stopped after reaching the total review time budget (${input.reviewBudgetMs}ms).`
-                );
+        for (const review of parsed.reviews) {
+            if (!matchReviewStarSelection(review, input.reviewStar)) {
+                continue;
+            }
+
+            const key = buildReviewKey(review);
+            if (seen.has(key)) {
+                continue;
+            }
+
+            seen.add(key);
+            reviews.push(review);
+
+            if (input.reviewStopAtId && review.id === input.reviewStopAtId) {
                 break;
             }
 
-            const normalizedCurrentUrl = this.normalizeReviewUrl(
-                currentUrl,
-                input.host,
-                input.asin,
-                input.reviewSortBy,
-                input.reviewerType
-            );
-
-            if (!normalizedCurrentUrl) {
+            if (reviews.length >= reviewItemLimit) {
                 break;
             }
-
-            currentUrl = normalizedCurrentUrl;
-
-            const reviewRequestTimeoutMs = Math.max(1000, Math.min(input.reviewTimeoutMs, remainingBudgetMs));
-            const scrapeResult = await scraperService.scrape(currentUrl, {
-                jsEnabled: true,
-                timeout: reviewRequestTimeoutMs,
-                stealth: input.stealth,
-                waitForSelector: input.waitForSelector,
-                screenshotOnError: false,
-            });
-
-            crawledUrls.push(scrapeResult.url);
-
-            const antiBotDetection = antiBotDetectionService.detect('amazon', scrapeResult.url, scrapeResult.html);
-            if (antiBotDetection.blocked) {
-                blocked = true;
-                antiBotSignals.push(...antiBotDetection.matchedSignals);
-                const signalSummary = antiBotDetection.matchedSignals.length > 0
-                    ? ` Signals: ${antiBotDetection.matchedSignals.join(', ')}`
-                    : '';
-                warnings.push(
-                    `Amazon checkpoint detected on review page ${pagesCrawled + 1}. Returned partial review set.${signalSummary}`
-                );
-                break;
-            }
-
-            const parsed = this.parseReviewPage(scrapeResult.html, scrapeResult.url, input.host);
-            pagesCrawled += 1;
-
-            if (!summary.averageRatingText && parsed.summary.averageRatingText) {
-                summary = parsed.summary;
-            }
-
-            for (const review of parsed.reviews) {
-                const key = buildReviewKey(review);
-                if (seen.has(key)) {
-                    continue;
-                }
-                seen.add(key);
-                reviews.push(review);
-
-                if (input.reviewStopAtId && review.id === input.reviewStopAtId) {
-                    shouldStop = true;
-                    break;
-                }
-            }
-
-            if (shouldStop) {
-                break;
-            }
-
-            const nextLink =
-                parsed.nextPageUrl ||
-                (pagesCrawled === 1 ? parsed.seeAllReviewsUrl : null);
-
-            if (!nextLink) {
-                break;
-            }
-
-            currentUrl = nextLink;
         }
 
         return {
-            blocked,
-            warnings,
-            crawledUrls,
-            antiBotSignals: dedupeStrings(antiBotSignals),
-            pagesCrawled,
-            summary,
+            summary: parsed.summary,
             reviews,
         };
     }
@@ -1360,24 +1367,14 @@ class AmazonService {
             );
         }
 
-        const locale = extractLocaleFromHost(host);
         const asinFromInput = extractAsin(input.input);
-        const reviewSortBy = input.reviewSortBy || DEFAULT_REVIEW_SORT;
-        const reviewerType = cleanText(input.reviewerType) || DEFAULT_REVIEWER_TYPE;
+        const reviewStar = input.reviewStar || DEFAULT_REVIEW_STAR;
         const reviewPageLimit = Math.max(
             1,
             Math.min(input.reviewPageLimit || DEFAULT_REVIEW_PAGE_LIMIT, MAX_REVIEW_PAGE_LIMIT)
         );
         const requestTimeoutMs = normalizeTimeoutMs(input.timeout);
-        const reviewTimeoutMs = Math.min(requestTimeoutMs, MAX_REVIEW_REQUEST_TIMEOUT_MS);
-        const reviewBudgetMs = Math.min(
-            MAX_TOTAL_REVIEW_BUDGET_MS,
-            Math.max(reviewTimeoutMs, reviewTimeoutMs * reviewPageLimit)
-        );
-
-        const warnings: string[] = [];
-        const crawledUrls: string[] = [];
-        const antiBotSignals: string[] = [];
+        const sessionKey = `amazon:${Date.now().toString(36)}:${Math.random().toString(36).slice(2, 10)}`;
 
         const productUrl = resolveInputUrl(input.input, host);
 
@@ -1389,23 +1386,56 @@ class AmazonService {
             );
         }
 
-        const productResult = await scraperService.scrape(productUrl, {
-            jsEnabled: true,
-            timeout: requestTimeoutMs,
-            stealth: input.stealth,
-            waitForSelector: input.waitForSelector,
-            screenshotOnError: false,
-        });
+        let productResult: Awaited<ReturnType<typeof scraperHttpService.scrape>> | null = null;
+        let lastProductBlockSignals: string[] = [];
 
-        crawledUrls.push(productResult.url);
+        for (let attempt = 1; attempt <= PRODUCT_BLOCK_RETRY_ATTEMPTS; attempt += 1) {
+            const candidateProductResult = await scraperHttpService.scrape(productUrl, {
+                jsEnabled: true,
+                timeout: requestTimeoutMs,
+                stealth: input.stealth,
+                waitForSelector: input.waitForSelector,
+                screenshotOnError: false,
+                sessionKey,
+                userAgentJitter: true,
+                minDelayMs: AMAZON_HTTP_DELAY_MIN_MS,
+                maxDelayMs: AMAZON_HTTP_DELAY_MAX_MS,
+                forceWwwAmazonHost: true,
+            });
 
-        const productAntiBot = antiBotDetectionService.detect('amazon', productResult.url, productResult.html);
-        if (productAntiBot.blocked) {
+            const productAntiBot = antiBotDetectionService.detect(
+                'amazon',
+                candidateProductResult.url,
+                candidateProductResult.html
+            );
+
+            if (!productAntiBot.blocked) {
+                productResult = candidateProductResult;
+                break;
+            }
+
+            lastProductBlockSignals = productAntiBot.matchedSignals;
+
+            if (attempt < PRODUCT_BLOCK_RETRY_ATTEMPTS) {
+                continue;
+            }
+
             const signalSummary = productAntiBot.matchedSignals.length > 0
                 ? ` Signals: ${productAntiBot.matchedSignals.join(', ')}`
                 : '';
             throw new AmazonServiceError(
-                `Amazon blocked the product inspection request. Try a warmed browser profile, different session, or proxy.${signalSummary}`,
+                `Amazon blocked the product inspection request. Try a different session, backoff, or proxy.${signalSummary}`,
+                'AMAZON_BLOCKED',
+                429
+            );
+        }
+
+        if (!productResult) {
+            const signalSummary = lastProductBlockSignals.length > 0
+                ? ` Signals: ${lastProductBlockSignals.join(', ')}`
+                : '';
+            throw new AmazonServiceError(
+                `Amazon blocked the product inspection request. Try a different session, backoff, or proxy.${signalSummary}`,
                 'AMAZON_BLOCKED',
                 429
             );
@@ -1415,98 +1445,61 @@ class AmazonService {
         const asin = parsedProduct.product.asin || asinFromInput;
 
         if (!asin) {
-            warnings.push('ASIN could not be confidently resolved from the inspected page.');
+            // Keep running with best-effort product payload even if ASIN parsing fails.
         }
 
-        let reviewBlocked = false;
-
-        let reviews: AmazonReviewsSnapshot = {
-            enabled: input.includeReviews !== false,
-            sortBy: reviewSortBy,
-            reviewerType,
-            pagesRequested: reviewPageLimit,
-            pagesCrawled: 0,
-            totalCollected: 0,
-            summary: parsedProduct.reviewsSummary,
-            items: [],
-        };
+        let reviewItems: AmazonReviewItem[] = [];
+        let reviewSummary: AmazonReviewSummary = parsedProduct.reviewsSummary;
 
         if (input.includeReviews !== false) {
-            if (!asin) {
-                warnings.push('Review crawl skipped because ASIN is unavailable.');
-            } else {
-                const fallbackReviewUrl = this.buildReviewUrl(
-                    host,
-                    asin,
-                    1,
-                    reviewSortBy,
-                    reviewerType
-                );
+            const reviewResult = this.collectReviewsFromProductPage({
+                html: productResult.html,
+                pageUrl: productResult.url,
+                host,
+                reviewPageLimit,
+                reviewStar,
+                reviewStopAtId: input.reviewStopAtId,
+            });
 
-                const startReviewUrl =
-                    this.normalizeReviewUrl(
-                        parsedProduct.reviewListingUrl || fallbackReviewUrl,
-                        host,
-                        asin,
-                        reviewSortBy,
-                        reviewerType
-                    ) || fallbackReviewUrl;
-
-                const reviewResult = await this.collectReviews({
-                    host,
-                    asin,
-                    startUrl: startReviewUrl,
-                    reviewPageLimit,
-                    reviewSortBy,
-                    reviewerType,
-                    reviewStopAtId: input.reviewStopAtId,
-                    reviewTimeoutMs,
-                    reviewBudgetMs,
-                    stealth: input.stealth,
-                    waitForSelector: input.waitForSelector,
-                    fallbackSummary: parsedProduct.reviewsSummary,
-                });
-
-                reviewBlocked = reviewResult.blocked;
-                warnings.push(...reviewResult.warnings);
-                crawledUrls.push(...reviewResult.crawledUrls);
-                antiBotSignals.push(...reviewResult.antiBotSignals);
-
-                reviews = {
-                    enabled: true,
-                    sortBy: reviewSortBy,
-                    reviewerType,
-                    pagesRequested: reviewPageLimit,
-                    pagesCrawled: reviewResult.pagesCrawled,
-                    totalCollected: reviewResult.reviews.length,
-                    summary: reviewResult.summary,
-                    items: reviewResult.reviews,
-                };
-            }
+            reviewItems = reviewResult.reviews;
+            reviewSummary = reviewResult.summary;
         }
+
+        const resolvedPriceValue =
+            parsedProduct.pricing.currentPrice ??
+            parsedProduct.pricing.dealPrice ??
+            parsedProduct.pricing.listPrice ??
+            null;
+        const resolvedReviewsCount =
+            parsedProduct.product.ratingsCount ??
+            parseInteger(reviewSummary.totalRatingsText) ??
+            parseInteger(parsedProduct.product.ratingsCountText);
+        const resolvedFeatures = dedupeStrings([
+            ...parsedProduct.product.featureBullets,
+            parsedProduct.product.description,
+        ]);
+        const resolvedSellerId =
+            parsedProduct.marketplaceData.sellerId ||
+            extractSellerIdFromUrl(parsedProduct.marketplaceData.sellerProfileUrl);
 
         return {
             input: input.input,
+            title: parsedProduct.product.title,
+            url: parsedProduct.product.canonicalUrl || parsedProduct.product.url,
             asin: asin || null,
-            marketplace: {
-                domain: host,
-                locale,
-                host,
+            brand: parsedProduct.product.brand,
+            price: {
+                value: resolvedPriceValue,
+                currency: resolvePriceCurrencySymbol(parsedProduct.pricing),
             },
-            product: {
-                ...parsedProduct.product,
-                asin: asin || parsedProduct.product.asin,
+            reviewsCount: resolvedReviewsCount,
+            features: resolvedFeatures,
+            seller: {
+                name: parsedProduct.marketplaceData.sellerName || parsedProduct.marketplaceData.soldBy,
+                id: resolvedSellerId,
+                url: parsedProduct.marketplaceData.sellerProfileUrl,
             },
-            pricing: parsedProduct.pricing,
-            reviews,
-            marketplaceData: parsedProduct.marketplaceData,
-            diagnostics: {
-                blocked: reviewBlocked,
-                warnings,
-                crawledUrls: Array.from(new Set(crawledUrls)),
-                antiBotSignals: dedupeStrings(antiBotSignals),
-                generatedAt: new Date().toISOString(),
-            },
+            reviews: reviewItems,
         };
     }
 }

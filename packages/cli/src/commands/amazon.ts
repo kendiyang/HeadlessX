@@ -6,6 +6,7 @@ interface AmazonInspectOptions {
   reviews?: boolean;
   reviewPageLimit?: number;
   reviewSortBy?: 'recent' | 'helpful';
+  reviewStar?: 'all' | 'positive' | 'critical';
   reviewerType?: string;
   reviewStopAtId?: string;
   timeout?: number;
@@ -29,6 +30,7 @@ export async function handleAmazonInspectCommand(
       ...(options.reviews !== undefined ? { includeReviews: options.reviews } : {}),
       ...(options.reviewPageLimit !== undefined ? { reviewPageLimit: options.reviewPageLimit } : {}),
       ...(options.reviewSortBy ? { reviewSortBy: options.reviewSortBy } : {}),
+      ...(options.reviewStar ? { reviewStar: options.reviewStar } : {}),
       ...(options.reviewerType ? { reviewerType: options.reviewerType } : {}),
       ...(options.reviewStopAtId ? { reviewStopAtId: options.reviewStopAtId } : {}),
       ...(options.timeout !== undefined ? { timeout: options.timeout } : {}),

@@ -13,7 +13,7 @@ const MAX_LIMIT = 500;
 const DEFAULT_DEPTH = 4;
 const MIN_DEPTH = 0;
 const MAX_DEPTH = 10;
-const REDDIT_USER_AGENT = 'HeadlessX/2.1 (+https://github.com/saifyxpro/HeadlessX)';
+const REDDIT_USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 
 const REDDIT_TIMEFRAMES = ['hour', 'day', 'week', 'month', 'year', 'all'] as const;
 

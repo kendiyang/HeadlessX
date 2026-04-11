@@ -11,7 +11,7 @@ export function EbayWorkbench({ available, unavailableReason }: EbayWorkbenchPro
     return (
         <MarketplaceInspectWorkbench
             operatorLabel="eBay"
-            description="Inspect listing metadata, pricing, seller, and availability data for marketplace intelligence."
+            description="Inspect listing metadata, pricing, seller, availability, and review data for marketplace intelligence."
             endpoint="/api/operators/ebay/inspect"
             inputPlaceholder="https://www.ebay.com/itm/... or 123456789012"
             marketplacePlaceholder="ebay.com or co.uk (optional)"
@@ -19,6 +19,11 @@ export function EbayWorkbench({ available, unavailableReason }: EbayWorkbenchPro
             idStatLabel="Item ID"
             available={available}
             unavailableReason={unavailableReason}
+            supportsReviews
+            reviewPageLimitMax={5000}
+            showMarketplaceInput={false}
+            showWaitForSelectorInput={false}
+            showTimeoutInput={false}
         />
     );
 }

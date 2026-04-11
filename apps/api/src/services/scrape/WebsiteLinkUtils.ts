@@ -1,4 +1,4 @@
-import { JSDOM } from 'jsdom';
+import { JSDOM, VirtualConsole } from 'jsdom';
 
 export type WebsiteLinkSource = 'page' | 'sitemap' | 'both';
 
@@ -66,6 +66,8 @@ const TRACKING_QUERY_PARAMS = new Set([
     'utm_source',
     'utm_term',
 ]);
+
+const JSDOM_SILENT_VIRTUAL_CONSOLE = new VirtualConsole();
 
 function trimTrailingSlash(pathname: string) {
     if (pathname === '/') {
@@ -307,7 +309,9 @@ export function extractLinksFromHtml(
     pageUrl: string,
     options: LinkFilterOptions = {}
 ) {
-    const dom = new JSDOM(html);
+    const dom = new JSDOM(html, {
+        virtualConsole: JSDOM_SILENT_VIRTUAL_CONSOLE,
+    });
     const baseHref = dom.window.document.querySelector('base[href]')?.getAttribute('href') || pageUrl;
     const links = new Map<string, WebsiteLink>();
     const anchors = Array.from(dom.window.document.querySelectorAll('a[href]')) as Array<{
@@ -356,7 +360,10 @@ function decodeXmlEntities(value: string) {
 
 function extractSitemapLocsWithDom(sitemapXml: string) {
     try {
-        const dom = new JSDOM(sitemapXml, { contentType: 'text/xml' });
+        const dom = new JSDOM(sitemapXml, {
+            contentType: 'text/xml',
+            virtualConsole: JSDOM_SILENT_VIRTUAL_CONSOLE,
+        });
         return Array.from(dom.window.document.getElementsByTagName('loc'))
             .map((node) => (node as Element).textContent?.trim() || '')
             .filter(Boolean);
@@ -403,7 +410,10 @@ export function extractLinksFromSitemap(
 }
 
 export function extractWebsiteMetadata(html: string, pageUrl: string) {
-    const dom = new JSDOM(html, { url: pageUrl });
+    const dom = new JSDOM(html, {
+        url: pageUrl,
+        virtualConsole: JSDOM_SILENT_VIRTUAL_CONSOLE,
+    });
     const document = dom.window.document;
     const getMeta = (...selectors: string[]) => {
         for (const selector of selectors) {

@@ -267,9 +267,35 @@ Important:
 
 ```bash
 headlessx amazon inspect https://www.amazon.com/dp/B0...
-headlessx amazon inspect B0... --review-page-limit 2 --review-sort-by recent
+headlessx amazon inspect B0... --review-page-limit 10 --review-star positive --review-sort-by recent
 headlessx amazon inspect https://www.amazon.com/dp/B0... --no-reviews
 headlessx amazon status
+```
+- Output payload (flattened):
+
+```json
+{
+  "title": "Product title",
+  "url": "https://www.amazon.com/dp/B012345678?th=1",
+  "asin": "B012345678",
+  "brand": "Brand name",
+  "price": { "value": 145.5, "currency": "$" },
+  "reviewsCount": 36704,
+  "features": ["Feature 1", "Feature 2"],
+  "seller": {
+    "name": "Seller name",
+    "id": "A210SJF12S88M5",
+    "url": "https://www.amazon.com/gp/help/seller/at-a-glance.html?..."
+  },
+  "reviews": [],
+  "reviewMeta": {
+    "reviewStar": "positive",
+    "filterByStar": "critical",
+    "pagesRequested": 10,
+    "pagesCrawled": 10,
+    "totalCollected": 120
+  }
+}
 ```
 - CLI `self-host` and `production` setup writes this automatically
 
@@ -277,7 +303,7 @@ headlessx amazon status
 
 ```bash
 headlessx ebay inspect https://www.ebay.com/itm/...
-headlessx ebay inspect 123456789012 --marketplace ebay.com
+headlessx ebay inspect 123456789012
 headlessx ebay status
 ```
 

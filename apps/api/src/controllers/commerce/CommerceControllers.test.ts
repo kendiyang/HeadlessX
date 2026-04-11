@@ -60,19 +60,22 @@ describe('AmazonController', () => {
             forwardedPayload = payload;
             return {
                 input: payload.input,
+                title: 'Demo Product',
+                url: 'https://www.amazon.com/dp/B012345678?th=1',
                 asin: 'B012345678',
-                marketplace: { domain: 'www.amazon.com', locale: 'us', host: 'www.amazon.com' },
-                product: {} as never,
-                pricing: {} as never,
-                reviews: {} as never,
-                marketplaceData: {} as never,
-                diagnostics: {
-                    blocked: false,
-                    warnings: [],
-                    crawledUrls: [],
-                    antiBotSignals: [],
-                    generatedAt: new Date().toISOString(),
+                brand: 'Demo',
+                price: {
+                    value: 145.5,
+                    currency: '$',
                 },
+                reviewsCount: 36704,
+                features: ['Feature one'],
+                seller: {
+                    name: 'Demo Seller',
+                    id: 'A210SJF12S88M5',
+                    url: 'https://www.amazon.com/gp/help/seller/at-a-glance.html?seller=A210SJF12S88M5',
+                },
+                reviews: [],
             };
         };
 
@@ -90,9 +93,10 @@ describe('AmazonController', () => {
                 input: 'B012345678',
                 marketplace: undefined,
                 includeReviews: true,
-                reviewPageLimit: 3,
+                reviewPageLimit: 1,
                 reviewSortBy: 'recent',
-                reviewerType: 'all_reviews',
+                reviewStar: undefined,
+                reviewerType: undefined,
                 reviewStopAtId: undefined,
                 timeout: undefined,
                 stealth: undefined,
@@ -159,15 +163,22 @@ describe('EbayController', () => {
             forwardedPayload = payload;
             return {
                 input: payload.input,
-                marketplace: { domain: 'www.ebay.com', host: 'www.ebay.com' },
-                item: {} as never,
-                diagnostics: {
-                    blocked: false,
-                    warnings: [],
-                    crawledUrls: [],
-                    antiBotSignals: [],
-                    generatedAt: new Date().toISOString(),
+                title: 'Demo eBay listing',
+                url: 'https://www.ebay.com/itm/123456789012',
+                asin: '123456789012',
+                brand: null,
+                price: {
+                    value: 10,
+                    currency: '$',
                 },
+                reviewsCount: 0,
+                features: [],
+                seller: {
+                    name: null,
+                    id: null,
+                    url: null,
+                },
+                reviews: [],
             };
         };
 
@@ -175,10 +186,8 @@ describe('EbayController', () => {
             const request = {
                 body: {
                     input: '123456789012',
-                    marketplace: 'ebay.com',
                     timeout: 45000,
                     stealth: true,
-                    waitForSelector: '.x-price-primary',
                 },
                 apiKeyId: 'api_key_ebay',
             } as unknown as Request;

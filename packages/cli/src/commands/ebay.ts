@@ -2,10 +2,14 @@ import { requestJson } from '../utils/http';
 import { writeStructured } from '../utils/output';
 
 interface EbayInspectOptions {
-  marketplace?: string;
+  reviews?: boolean;
+  reviewPageLimit?: number;
+  reviewSortBy?: 'recent' | 'relevant' | 'helpful';
+  reviewStar?: 'all' | 'positive' | 'neutral' | 'negative' | 'critical';
+  reviewerType?: string;
+  reviewStopAtId?: string;
   timeout?: number;
   stealth?: boolean;
-  waitForSelector?: string;
   json?: boolean;
   output?: string;
   pretty?: boolean;
@@ -20,10 +24,14 @@ export async function handleEbayInspectCommand(
     path: '/api/operators/ebay/inspect',
     body: {
       input,
-      ...(options.marketplace ? { marketplace: options.marketplace } : {}),
+      ...(options.reviews !== undefined ? { includeReviews: options.reviews } : {}),
+      ...(options.reviewPageLimit !== undefined ? { reviewPageLimit: options.reviewPageLimit } : {}),
+      ...(options.reviewSortBy ? { reviewSortBy: options.reviewSortBy } : {}),
+      ...(options.reviewStar ? { reviewStar: options.reviewStar } : {}),
+      ...(options.reviewerType ? { reviewerType: options.reviewerType } : {}),
+      ...(options.reviewStopAtId ? { reviewStopAtId: options.reviewStopAtId } : {}),
       ...(options.timeout !== undefined ? { timeout: options.timeout } : {}),
       ...(options.stealth !== undefined ? { stealth: options.stealth } : {}),
-      ...(options.waitForSelector ? { waitForSelector: options.waitForSelector } : {}),
     },
   });
 
