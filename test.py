@@ -26,7 +26,7 @@ def fetch_product_page(page_index: int, asin: str = "B0FFTB9JZ9", ref: str = "lp
     # 构建目标URL
     #url = f"https://www.amazon.com/dp/{asin}/ref={ref}.json?th={page_index}"
     #url = f"https://www.amazon.com/dp/{asin}?th={page_index}"
-    url = f"https://www.ebay.com/itm/388886907012"
+    url = f"https://www.walmart.com/ip/Pure-Encapsulations-Macular-Support-Formula-Hypoallergenic-Supplement-with-Enhanced-Antioxidant-Formula-for-Healthy-Eyes-120-Capsules/179754684"
     #url = f'https://www.amazon.com/-/zh/product-reviews/{asin}/ref=cm_cr_arp_d_viewopt_srt?filterByStar=critical&reviewerType=all_reviews&pageNumber={page_index}&sortBy=recent#reviews-filter-bar'
     
     # 每次请求使用不同的请求头，模仿浏览器差异

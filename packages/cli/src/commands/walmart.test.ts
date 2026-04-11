@@ -19,10 +19,8 @@ describe('walmart command handlers', () => {
 
   test('handleWalmartInspectCommand calls walmart inspect endpoint with mapped body', async () => {
     await handleWalmartInspectCommand('123456789', {
-      marketplace: 'walmart.com',
       timeout: 30000,
       stealth: false,
-      waitForSelector: '[data-testid="price-wrap"]',
       json: true,
       pretty: true,
       output: '/tmp/walmart.json',
@@ -33,10 +31,8 @@ describe('walmart command handlers', () => {
       path: '/api/operators/walmart/inspect',
       body: {
         input: '123456789',
-        marketplace: 'walmart.com',
         timeout: 30000,
         stealth: false,
-        waitForSelector: '[data-testid="price-wrap"]',
       },
     });
 
@@ -49,6 +45,31 @@ describe('walmart command handlers', () => {
         title: 'Walmart Inspect',
       }
     );
+  });
+
+  test('handleWalmartInspectCommand maps review options', async () => {
+    await handleWalmartInspectCommand('123456789', {
+      reviews: false,
+      reviewPageLimit: 25,
+      reviewSortBy: 'relevant',
+      reviewStar: 'negative',
+      reviewerType: 'all_reviews',
+      reviewStopAtId: 'REV002',
+    });
+
+    expect(requestJson).toHaveBeenCalledWith({
+      method: 'POST',
+      path: '/api/operators/walmart/inspect',
+      body: {
+        input: '123456789',
+        includeReviews: false,
+        reviewPageLimit: 25,
+        reviewSortBy: 'relevant',
+        reviewStar: 'negative',
+        reviewerType: 'all_reviews',
+        reviewStopAtId: 'REV002',
+      },
+    });
   });
 
   test('handleWalmartStatusCommand calls status endpoint', async () => {

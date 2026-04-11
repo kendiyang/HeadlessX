@@ -258,15 +258,22 @@ describe('WalmartController', () => {
             forwardedPayload = payload;
             return {
                 input: payload.input,
-                marketplace: { domain: 'www.walmart.com', host: 'www.walmart.com' },
-                product: {} as never,
-                diagnostics: {
-                    blocked: false,
-                    warnings: [],
-                    crawledUrls: [],
-                    antiBotSignals: [],
-                    generatedAt: new Date().toISOString(),
+                title: 'Demo Walmart listing',
+                url: 'https://www.walmart.com/ip/123456789',
+                asin: '123456789',
+                brand: 'Demo',
+                price: {
+                    value: 10,
+                    currency: '$',
                 },
+                reviewsCount: 0,
+                features: [],
+                seller: {
+                    name: null,
+                    id: null,
+                    url: null,
+                },
+                reviews: [],
             };
         };
 
@@ -274,10 +281,14 @@ describe('WalmartController', () => {
             const request = {
                 body: {
                     input: '123456789',
-                    marketplace: 'walmart.com',
+                    includeReviews: true,
+                    reviewPageLimit: 5,
+                    reviewSortBy: 'recent',
+                    reviewStar: 'positive',
+                    reviewerType: 'all_reviews',
+                    reviewStopAtId: 'REV001',
                     timeout: 30000,
                     stealth: false,
-                    waitForSelector: '[data-testid="price-wrap"]',
                 },
                 apiKeyId: 'api_key_walmart',
             } as unknown as Request;

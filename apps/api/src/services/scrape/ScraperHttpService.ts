@@ -551,9 +551,6 @@ class ScraperHttpService {
                 httpsAgent: agents.httpsAgent,
             });
 
-            console.log("===================:",targetUrl)
-            console.log("********************:",response.data.toString())
-
             statusCode = response.status;
 
             const responseReportedFinalUrl = this.resolveFinalUrl(response, targetUrl);

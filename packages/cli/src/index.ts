@@ -443,14 +443,18 @@ ebay
   .option('--pretty', 'Pretty-print JSON')
   .action(handleEbayStatusCommand);
 
-const walmart = program.command('walmart').description('Inspect Walmart product metadata, pricing, and seller signals.');
+const walmart = program.command('walmart').description('Inspect Walmart product metadata, pricing, seller, and review signals.');
 walmart
   .command('inspect')
   .argument('<input>', 'Walmart product URL/path or numeric product ID')
-  .option('--marketplace <value>', 'Marketplace domain or locale (for example: walmart.com, ca)')
+  .option('--no-reviews', 'Skip review extraction')
+  .option('--review-page-limit <number>', 'Maximum review pages to crawl', parseInt)
+  .option('--review-sort-by <mode>', 'recent or relevant', 'recent')
+  .option('--review-star <mode>', 'positive, neutral, negative, or all (critical kept for compatibility)', 'positive')
+  .option('--reviewer-type <type>', 'Reserved for parity with Amazon inspect options')
+  .option('--review-stop-at-id <id>', 'Stop review collection when this review ID is reached')
   .option('--timeout <ms>', 'Request timeout in milliseconds', parseInt)
   .option('--stealth <mode>', 'Stealth mode: on or off', parseStealthMode)
-  .option('--wait-for-selector <selector>', 'Selector to wait for before extraction')
   .option('--json', 'Output JSON')
   .option('-o, --output <path>', 'Write output to a file')
   .option('--pretty', 'Pretty-print JSON')

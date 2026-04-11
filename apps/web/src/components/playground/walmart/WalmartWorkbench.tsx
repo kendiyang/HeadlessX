@@ -11,7 +11,7 @@ export function WalmartWorkbench({ available, unavailableReason }: WalmartWorkbe
     return (
         <MarketplaceInspectWorkbench
             operatorLabel="Walmart"
-            description="Inspect product metadata, pricing, seller, and availability data for catalog monitoring."
+            description="Inspect product metadata, pricing, seller, availability, and review data for catalog monitoring."
             endpoint="/api/operators/walmart/inspect"
             inputPlaceholder="https://www.walmart.com/ip/... or 123456789"
             marketplacePlaceholder="walmart.com or ca (optional)"
@@ -19,6 +19,11 @@ export function WalmartWorkbench({ available, unavailableReason }: WalmartWorkbe
             idStatLabel="Product ID"
             available={available}
             unavailableReason={unavailableReason}
+            supportsReviews
+            reviewPageLimitMax={5000}
+            showMarketplaceInput={false}
+            showWaitForSelectorInput={false}
+            showTimeoutInput={false}
         />
     );
 }
